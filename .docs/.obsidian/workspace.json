@@ -14,7 +14,7 @@
               "type": "markdown",
               "state": {
                 "file": "CALL ME MAYBE.md",
-                "mode": "source",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
@@ -83,7 +83,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 356.5
+    "width": 356.5,
+    "collapsed": true
   },
   "right": {
     "id": "32ab601ec355a6f6",

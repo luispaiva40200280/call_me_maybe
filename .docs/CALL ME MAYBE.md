@@ -73,8 +73,8 @@ Before starting implementation, ensure you have the following knowledge base:
 *   **Data Validation**: Experience using `pydantic` for defining strict data schemas and validating complex nested dictionaries[cite: 1].
 
 ### AI/ML Knowledge Required
-*   **Tokenization**: Understanding how text is split into tokens (e.g., preserving leading spaces like `Ġ`)[cite: 1].
-*   **Probability & Logits**: Understanding that neural networks output raw scores (logits) that correspond to probabilities of the next item[cite: 1].
+*   **Tokenization**: Understanding how text is split into tokens (e.g., preserving leading spaces like `Ġ`).
+*   **Probability & Logits**: Understanding that neural networks output raw scores (logits) that correspond to probabilities of the next item.
 
 ---
 
