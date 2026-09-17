@@ -24,7 +24,7 @@ def main():
     print("Token Breakdown:")
     print("-" * 30)
     for token_id in token_ids:
-        # The decode method expects a list or tensor, so we wrap the 
+        # The decode method expects a list or tensor, so we wrap the
         # single ID in a list
         token_string = model.decode([token_id])
 
