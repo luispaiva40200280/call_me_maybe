@@ -1,8 +1,11 @@
 from llm_sdk import Small_LLM_Model
+from time import time
+import json
 
 
 def main():
     print("Loading the model and tokenizer...")
+    t = time()
     # Initialize the model (defaults to Qwen/Qwen3-0.6B)
     model = Small_LLM_Model()
 
@@ -19,7 +22,13 @@ def main():
 
     print(f"\nTotal tokens: {len(token_ids)}")
     print(f"Token IDs array: {token_ids}\n")
+    vocab_path = model.get_path_to_vocab_file()
+    print(f"Found vocabulary file at: {vocab_path}")
 
+    # 2. Open and load the dictionary
+    with open(vocab_path, 'r', encoding='utf-8') as f:
+        vocab_dict = json.load(f)
+    print(f"\nTotal tokens in the dictionary: {len(vocab_dict)}")
     # 2. DECODE: Translate each individual ID back into text
     print("Token Breakdown:")
     print("-" * 30)
@@ -31,6 +40,7 @@ def main():
         # We use repr() to clearly see spaces (it will print ' word'
         # instead of just  word)
         print(f"ID {token_id:<6} -> {repr(token_string)}")
+    print(f"time of loading: -> {time() - t}")
 
 
 if __name__ == "__main__":
