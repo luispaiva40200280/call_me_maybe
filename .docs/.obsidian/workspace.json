@@ -4,60 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "b0963fda8209ec28",
+        "id": "4e948b586246b30e",
         "type": "tabs",
         "children": [
           {
-            "id": "8eccbb95e5a96a98",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "CALL ME MAYBE.md",
-                "mode": "preview",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "CALL ME MAYBE"
-            }
-          },
-          {
-            "id": "14586a4dbc54f7b1",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "CALL ME MAYBE.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "CALL ME MAYBE"
-            }
-          },
-          {
-            "id": "f04fd88e2960d806",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "CALL ME MAYBE.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "CALL ME MAYBE"
-            }
-          }
-        ],
-        "currentTab": 2
-      },
-      {
-        "id": "88926abfea245a9c",
-        "type": "tabs",
-        "children": [
-          {
-            "id": "827f1c32c2ade3dc",
+            "id": "b1e1117accb63a28",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -69,8 +20,23 @@
               "icon": "lucide-file",
               "title": "LOGITS AND TOKEN SELECTION"
             }
+          },
+          {
+            "id": "cb5a9dfa5d44c7c5",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "BPE - BYTE PAIR ENCODING.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "BPE - BYTE PAIR ENCODING"
+            }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -132,8 +98,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 239.5,
-    "collapsed": true
+    "width": 239.5
   },
   "right": {
     "id": "32ab601ec355a6f6",
@@ -235,12 +200,16 @@
       "bases:Create new base": false
     }
   },
-  "active": "827f1c32c2ade3dc",
+  "active": "cb5a9dfa5d44c7c5",
   "lastOpenFiles": [
-    "CALL ME MAYBE.md",
     "LOGITS AND TOKEN SELECTION.md",
+    "Untitled.md",
+    "Dot Product.md",
+    "BPE - BYTE PAIR ENCODING.md",
     "UV PACKAGE MANAGER.md",
-    "call_me_maybe.pdf",
-    "TOKENS.md"
+    "TOKENS.md",
+    "BPE - BYTE PAIR ECODING.md",
+    "CALL ME MAYBE.md",
+    "call_me_maybe.pdf"
   ]
 }

@@ -65,7 +65,7 @@ uv run python test_tokens.py
 # (No activation required. Safe, isolated, and guaranteed to use the project's dependencies).
 ```
 
-> [!ressorces]
+> [!resources]
 > Resource[^1]s for Further Study (reference official sources):
 > -  Astral's Official uv Documentation
 > - Study Focus: Read the "Concepts" section to fully grasp how uv.lock works and why the Rust backend makes it so fast.

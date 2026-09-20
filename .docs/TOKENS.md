@@ -33,3 +33,5 @@ If we feed the sentence `"What is the sum"` into the tokenizer, the process look
 >[!note]
 >_The numbers above are illustrative; exact IDs depend entirely on the specific model's dictionary._
 
+> [!LINK]
+> [[BPE - BYTE PAIR ENCODING]]
