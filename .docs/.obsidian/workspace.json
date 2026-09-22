@@ -185,14 +185,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "0c46700992b76658",
+  "active": "b1e1117accb63a28",
   "lastOpenFiles": [
-    "8.md",
-    "BPE - BYTE PAIR ENCODING.md",
-    "CALL ME MAYBE.md",
-    "LOGITS AND TOKEN SELECTION.md",
-    "1.md",
     "Dot Product.md",
+    "LOGITS AND TOKEN SELECTION.md",
+    "CALL ME MAYBE.md",
+    "BPE - BYTE PAIR ENCODING.md",
+    "8.md",
+    "1.md",
     "Untitled.md",
     "UV PACKAGE MANAGER.md",
     "TOKENS.md",

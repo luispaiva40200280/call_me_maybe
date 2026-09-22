@@ -385,4 +385,3 @@ Use this checklist before submitting your repository:
 - [ ] Constrained decoding is implemented properly (modifying logits, not prompting)[cite: 1].
     
 - [ ] Output JSON perfectly matches the `prompt`, `name`, `parameters` schema[cite: 1].
-    

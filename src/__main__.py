@@ -1,36 +1,6 @@
-from typing import Any
+from llm_sdk import Small_LLM_Model
 import argparse
-from src.schemas import PromptInput
-import json
-from pathlib import Path
-
-
-class FileHandler:
-    """Class for opening and reading JSON files safely."""
-    def __init__(self, path_name: str, file_type: str) -> None:
-        self.path_name = path_name
-        self.file_type = file_type
-
-    def validate_data(self, data: list[dict[str, Any]]) -> None:
-        """Validate of the data using the pydantic modules"""
-        if self.file_type == "prompt":
-            [PromptInput(**prompt) for prompt in data]
-        # if the file is func calling needs another validation
-
-    def parse_file(self) -> list[dict[str, Any]]:
-        """
-        Safely loads the JSON file.
-        Note: This is now an instance method using `self`, not a classmethod.
-        """
-
-        path_file = Path(self.path_name)
-        if not path_file.exists():
-            raise FileNotFoundError(f"The {self.file_type} file was not \
-found at: {self.path_name}")
-        with open(path_file, 'r', encoding="utf-8") as file:
-            data = json.load(file)
-        self.validate_data(data)
-        return data
+from src.loaders import FileHandler, load_vocab_lut
 
 
 def ArgsParser() -> argparse.Namespace:
@@ -70,7 +40,9 @@ def ArgsParser() -> argparse.Namespace:
 
 def main() -> None:
     """ Main function to create and use the llm model and the pipeline"""
+    import json   # use to test the loaders
     ARGS = ArgsParser()
+    MODEL = Small_LLM_Model(ARGS.model)
     print(ARGS)
     # model creation
     # model = ModelCreate(arguments.model)
@@ -82,6 +54,8 @@ def main() -> None:
             path_name=ARGS.functions_definition,
             file_type="definitions"
         ).parse_file()
+        vocab = load_vocab_lut(MODEL)
+        # TESTING IF THE FILES ARE OPENING AND STORING THE DATA CORRECTLY
         print("=== Prompts in json file")
         for prom in prompts:
             print(f"- {prom.values()}")
@@ -92,6 +66,9 @@ def main() -> None:
             # .model_dump() (or .dict() in older Pydantic versions) converts
             # the model back to a readable dictionary
             print(json.dumps(func, indent=2))
+        for index, item in enumerate(vocab.items(), start=1):
+            print(f"{index} -- {item}")
+        print(MODEL._model)
     except Exception as e:
         print(f"\033[31m Error: {e}\033[0m")
 
