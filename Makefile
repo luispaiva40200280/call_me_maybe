@@ -6,7 +6,8 @@ all: install run
 
 install:
 	uv venv
-	uv pip install pydantic numpy flake8 llm_sdk
+	uv pip install  pydantic numpy flake8 
+	uv pip install -e llm_sdk
 run:
 	uv run python -m src --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
 clean:

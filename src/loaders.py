@@ -37,7 +37,8 @@ found at: {self.path_name}")
         return data
 
 
-def load_vocab_lut(model: Small_LLM_Model) -> dict[int, str]:
+def load_vocab_lut(model: Small_LLM_Model) -> tuple[dict[int, str],
+                                                    dict[str, int]]:
     """
     load the vocab dict from model in the (dict[str: token])
     """
@@ -46,4 +47,4 @@ def load_vocab_lut(model: Small_LLM_Model) -> dict[int, str]:
     with open(path, "r", encoding="utf-8") as f:
         vocab = json.load(f)
     lut: dict[int, str] = {v: k for k, v in vocab.items()}
-    return lut
+    return lut, vocab

@@ -1,6 +1,7 @@
 from llm_sdk import Small_LLM_Model
 import argparse
-from src.loaders import FileHandler, load_vocab_lut
+from src.loaders import FileHandler
+from src.pipeline import Pipeline
 
 
 def ArgsParser() -> argparse.Namespace:
@@ -40,12 +41,7 @@ def ArgsParser() -> argparse.Namespace:
 
 def main() -> None:
     """ Main function to create and use the llm model and the pipeline"""
-    import json   # use to test the loaders
     ARGS = ArgsParser()
-    MODEL = Small_LLM_Model(ARGS.model)
-    print(ARGS)
-    # model creation
-    # model = ModelCreate(arguments.model)
     try:
         prompts = FileHandler(
             path_name=ARGS.input,
@@ -54,7 +50,23 @@ def main() -> None:
             path_name=ARGS.functions_definition,
             file_type="definitions"
         ).parse_file()
-        vocab = load_vocab_lut(MODEL)
+        pipeline = Pipeline(model=Small_LLM_Model(ARGS.model))
+        print(prompts)
+        print(functions_calling)
+        print(f"lut : {pipeline.lut}")
+        print(f"lut trei: {pipeline.vocab_trie.root}")
+    except Exception as e:
+        print(f"\033[31m Error: {e}\033[0m")
+
+
+if __name__ == "__main__":
+    main()
+
+"""
+        lut_trie = VocabularyTrie()
+        lut_trie.build_from_lut(lut)
+    # import json   # use to test the loaders
+
         # TESTING IF THE FILES ARE OPENING AND STORING THE DATA CORRECTLY
         print("=== Prompts in json file")
         for prom in prompts:
@@ -66,12 +78,20 @@ def main() -> None:
             # .model_dump() (or .dict() in older Pydantic versions) converts
             # the model back to a readable dictionary
             print(json.dumps(func, indent=2))
-        for index, item in enumerate(vocab.items(), start=1):
+        for index, item in enumerate(lut.items(), start=1):
             print(f"{index} -- {item}")
-        print(MODEL._model)
-    except Exception as e:
-        print(f"\033[31m Error: {e}\033[0m")
 
-
-if __name__ == "__main__":
-    main()
+        # Manual verification tests
+        print("Testing Trie Insertion...")
+        # 1. Test root level children
+        print(f"Number of distinct starting characters:
+        {len(lut_trie.root.children)}")
+        # 2. Test a specific known path (e.g., the '{' character)
+        if "{" in lut_trie.root.children:
+            brace_node = lut_trie.root.children["{"]
+            print(f"Node for '{{' has token ID: {brace_node.token_id}")
+            print(f"Characters that can follow
+              '{{': {list(brace_node.children.keys())[:5]}") # Print first 5
+        else:
+            print("Error: '{' not found in Trie.")
+"""
