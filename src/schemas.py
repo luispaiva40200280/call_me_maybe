@@ -1,17 +1,12 @@
 from pydantic import BaseModel, field_validator
 
 
-class Schema():
-    """Base class for all schemas."""
-    pass
-
-
-class PromptSchema(BaseModel, Schema):
+class PromptSchema(BaseModel):
     """Schema for validating objects inside function_calling_tests.json"""
     prompt: str
 
 
-class ParameterSchema(BaseModel, Schema):
+class ParameterSchema(BaseModel):
     """Pydantic model for individual parameter definitions."""
     type: str
 
@@ -24,7 +19,7 @@ class ParameterSchema(BaseModel, Schema):
         return value
 
 
-class FunctionDef(BaseModel, Schema):
+class FunctionDef(BaseModel):
     """Schema for validating objects inside functions_definition.json"""
     name: str
     description: str

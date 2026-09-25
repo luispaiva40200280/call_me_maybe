@@ -12,29 +12,28 @@ class FileHandler:
         self.path_name = path_name
         self.file_type = file_type
 
-    def validate_data(self, data: list[dict[str, Any]]) -> None:
+    def validate_data(self, data: list[dict[str, Any]]) -> list[Any]:
         """Validate of the data using the pydantic modules"""
         if self.file_type == "prompt":
-            [PromptSchema(**prompt) for prompt in data]
+            return [PromptSchema(**prompt) for prompt in data]
         # if the file is func calling needs another validation
         elif self.file_type == "definitions":
-            [FunctionDef(**def_func) for def_func in data]
+            return [FunctionDef(**def_func) for def_func in data]
+        return data
 
-    def parse_file(self) -> list[dict[str, Any]]:
+    def parse_file(self) -> list[Any]:
         """
         Safely loads the JSON file.
         Returns:
             data (list[dict[str, Any]])
         """
-
         path_file = Path(self.path_name)
         if not path_file.exists():
             raise FileNotFoundError(f"The {self.file_type} file was not \
 found at: {self.path_name}")
         with open(path_file, 'r', encoding="utf-8") as file:
             data = json.load(file)
-        self.validate_data(data)
-        return data
+        return self.validate_data(data)
 
 
 def load_vocab_lut(model: Small_LLM_Model) -> tuple[dict[int, str],

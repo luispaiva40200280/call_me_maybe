@@ -31,3 +31,19 @@ class VocabularyTrie:
         """
         for token_string, token_id in vocab.items():
             self.insert(token_string, token_id)
+
+    def search_allowed_tokens(self, str_allowed: list[str]) -> list[int]:
+        """"
+        Searches the Trie for the allowed strings.
+        Returns Token IDs for exact matches AND valid partial prefixes.
+        """
+        valid: set = set()
+        for word in str_allowed:
+            node = self.root
+            for char in word:
+                if char not in node.children:
+                    break
+                node = node.children[char]
+                if node.token_id is not None:
+                    valid.add(node.token_id)
+        return list(valid)

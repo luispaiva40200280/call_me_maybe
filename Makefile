@@ -11,7 +11,17 @@ install:
 run:
 	uv run python -m src --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
 clean:
-	rm -rf __pycache__ .mypy_cache
+	@find . -type f -name "*.pyc" -delete
+	@find . -type f -name "*.pyo" -delete
+	@echo "Cleaning all project cache files..."
+# 1. Finds and deletes all __pycache__ folders anywhere
+	@find . -type d -name "__pycache__" -exec rm -rf {} +
+# 2. Deletes lingering compiled python files anywhere
+	@find . -type f -name "*.pyc" -delete
+	@find . -type f -name "*.pyo" -delete
+# 3. Recursively removes Mypy and Pytest cache folders anywhere
+	@find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	@find . -type d -name ".pytest_cache" -exec rm -rf {} +
 
 lint:
 	flake8 src
