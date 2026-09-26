@@ -44,3 +44,31 @@ method generate(prompt_text):
         # This is critical! On the next loop, the model needs to "see" 
         # what it just typed so it knows how to continue.
         prompt += next_token_text
+
+
+import string
+        
+        # 1. Cache String Tokens
+        for tid, text in self.lut.items():
+            if '"' in text:
+                # Include the Ġ symbol!
+                clean = text.strip(" \n\tĠ\u2581")
+                # ONLY allow the pure quote. Ban '",', '"}', etc.
+                if clean == '"':
+                    self.string_allowed_tokens.append(tid)
+            else:
+                self.string_allowed_tokens.append(tid)
+                
+        # 2. Cache Number Tokens
+        number_charset = set(string.digits + " -.,}Ġ\u2581\n")
+        raw_num_tokens = self.vocab_trie.search_by_charset(number_charset)
+        
+        for tid in raw_num_tokens:
+            text = self.lut.get(tid, "")
+            # Ban tokens that bleed numbers with braces or commas (like '16}', '}}')
+            if ',' in text or '}' in text:
+                clean = text.strip(" \n\tĠ\u2581")
+                if clean in (',', '}'):
+                    self.number_allowed_tokens.append(tid)
+            else:
+                self.number_allowed_tokens.append(tid)

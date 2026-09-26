@@ -2,6 +2,7 @@ from llm_sdk import Small_LLM_Model
 import argparse
 from src.loaders import parse_file
 from src.pipeline import Pipeline
+from src import ft_time
 
 
 def ArgsParser() -> argparse.Namespace:
@@ -39,6 +40,7 @@ def ArgsParser() -> argparse.Namespace:
     return args
 
 
+@ft_time
 def main() -> None:
     """
     Main function to create and use the llm model and the pipeline
@@ -60,13 +62,14 @@ def main() -> None:
         for i, prom in enumerate(prompts, start=1):
             print(f"testing Prompt pipeline nbr: {i}")
             print(f"Prompt: {prom.prompt}")
+            start = time.time()
             pipeline.generate(prompt=prom.prompt)
             print("\n")
+            end = time.time()
+            time_structure = time.gmtime(end - start)
+            formatted_string = time.strftime("%M:%S", time_structure)
+            print(f"Time of excution: {formatted_string}")
             print("----" * 35)
-        end = time.time()
-        time_structure = time.gmtime(end - start)
-        formatted_string = time.strftime("%M:%S", time_structure)
-        print(f"Time of excution: {formatted_string}")
     except Exception as e:
         print(f"\033[31m Error: {e}\033[0m")
     except KeyboardInterrupt:

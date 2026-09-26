@@ -48,7 +48,24 @@ class Pipeline(BaseModel):
             self.number_allowed_tokens.append(tid)
 
     def _get_best_token_by_logits(self, logits: list[float],
-                                  allowed: list[int]) -> int:
+                                  allowed: list[int],
+                                  context: list[int]) -> int:
+        """
+        Finds the allowed token with the highest logit score,
+        applying a repetition penalty."""
+        penalty = 1.2  # Standard penalty multiplier
+
+        # Grab the last 40 tokens to check for loops
+        recent_tokens = set(context[-40:])
+
+        for tid in recent_tokens:
+            # Artificially suppress the score of recently used tokens
+            if logits[tid] > 0:
+                logits[tid] /= penalty
+            else:
+                logits[tid] *= penalty
+
+        # Python's optimized built-in max function
         return max(allowed, key=lambda tid: logits[tid])
 
     def _build_system_prompt(self, user: str) -> str:
@@ -56,19 +73,27 @@ class Pipeline(BaseModel):
             Formats the available tool schemas and the user request into
             a single prompt.
         """
-        import json
-        # Convert the Pydantic schemas into a formatted JSON string
-        tool_schemas = [func.model_dump() for func in self.func_call]
-        tools_str = json.dumps(tool_schemas, separators=(",", ":"))
-        # Assemble the full context prompt
-        full_prompt = (
-            "You are a helpful AI assistant. You must call a function to\
-fulfill the user's request.\n"
-            f"Available functions:\n{tools_str}\n\n"
-            f"User request: {user}\n"
-            "Function call (JSON): "
+        fn_defs_lines: list[str] = []
+        for fn in self.func_call:
+            # Format parameters compactly: a: number, b: number
+            param_parts = []
+            for param_name, param_schema in fn.parameters.items():
+                param_parts.append(f"{param_name}: {param_schema.type}")
+            params_str = ", ".join(param_parts)
+
+            # Format the function signature
+            fn_defs_lines.append(f"- {fn.name}({params_str}):\
+{fn.description}")
+
+        fn_defs_block = "\n".join(fn_defs_lines)
+        # Truncated the hardcoded JSON so the FSM can generate the root brace
+        return (
+            "You are a function calling assistant.\n\n"
+            "Available functions:\n"
+            f"{fn_defs_block}\n\n"
+            f"User request: {user}\n\n"
+            "Output the correct function call as JSON:\n"
         )
-        return full_prompt
 
     def generate(self, prompt: str) -> str:
         """Generate the function Calling for each prompt"""
@@ -109,7 +134,8 @@ fulfill the user's request.\n"
 
             logits = self.model.get_logits_from_input_ids(TOKENS)
             next_token = self._get_best_token_by_logits(logits=logits,
-                                                        allowed=allowed_tokens)
+                                                        allowed=allowed_tokens,
+                                                        context=TOKENS)
             TOKENS.append(next_token)
             # Translate the token ID back to text to see what the model chose
             next_token_text = self.lut.get(next_token, "")
