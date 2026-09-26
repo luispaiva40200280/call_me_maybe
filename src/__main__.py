@@ -1,6 +1,6 @@
 from llm_sdk import Small_LLM_Model
 import argparse
-from src.loaders import FileHandler
+from src.loaders import parse_file
 from src.pipeline import Pipeline
 
 
@@ -43,22 +43,34 @@ def main() -> None:
     """
     Main function to create and use the llm model and the pipeline
     """
+    import time
+    import sys
+    start = time.time()
     ARGS = ArgsParser()
     try:
-        prompts = FileHandler(
-            path_name=ARGS.input,
-            file_type="prompt").parse_file()
-        functions_calling = FileHandler(
-            path_name=ARGS.functions_definition,
-            file_type="definitions"
-        ).parse_file()
+        prompts = parse_file(
+            path=ARGS.input,
+            type="prompt")
+        functions_calling = parse_file(
+            path=ARGS.functions_definition,
+            type="definitions"
+        )
         pipeline = Pipeline(model=Small_LLM_Model(ARGS.model),
                             func_call=functions_calling)
-        print(pipeline)
-        print(functions_calling)
-        print(prompts)
+        for i, prom in enumerate(prompts, start=1):
+            print(f"testing Prompt pipeline nbr: {i}")
+            print(f"Prompt: {prom.prompt}")
+            pipeline.generate(prompt=prom.prompt)
+            print("\n")
+            print("----" * 35)
+        end = time.time()
+        time_structure = time.gmtime(end - start)
+        formatted_string = time.strftime("%M:%S", time_structure)
+        print(f"Time of excution: {formatted_string}")
     except Exception as e:
         print(f"\033[31m Error: {e}\033[0m")
+    except KeyboardInterrupt:
+        sys.exit(0)
 
 
 if __name__ == "__main__":

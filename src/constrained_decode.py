@@ -1,19 +1,18 @@
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
+from pydantic.dataclasses import dataclass
+from dataclasses import field as dcfield  # Needed for standard default_factory
 from typing import Optional, Dict
 
 
 @dataclass
 class TrieNode:
-    # default_factory ensures each node gets its own separate dictionary
-    # 'TrieNode' is in quotes as a forward reference for recursive typing
-    # None means this specific node does not mark the end of a valid token
-    children: dict[str, 'TrieNode'] = field(default_factory=dict)
+    """"""
+    children: dict[str, 'TrieNode'] = dcfield(default_factory=dict)
     token_id: Optional[int] = None
 
 
-class VocabularyTrie:
-    def __init__(self) -> None:
-        self.root = TrieNode()
+class VocabularyTrie(BaseModel):
+    root: TrieNode = Field(default_factory=TrieNode)
 
     def insert(self, token_string: str, token_id: int) -> None:
         """
@@ -46,4 +45,22 @@ class VocabularyTrie:
                 node = node.children[char]
                 if node.token_id is not None:
                     valid.add(node.token_id)
+        return list(valid)
+
+    def search_by_charset(self, charset: set[str]) -> list[int]:
+        """
+            Returns all Token IDs composed entirely of the allowed characters.
+        """
+        valid: set[int] = set()
+
+        def dfs(node: TrieNode, is_root: bool):
+            # If this node marks a valid token, allow it
+            if node.token_id is not None and not is_root:
+                valid.add(node.token_id)
+            # Continue down branches that match our allowed characters
+            for char, child in node.children.items():
+                if char in charset:
+                    dfs(child, False)
+
+        dfs(self.root, True)
         return list(valid)

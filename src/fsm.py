@@ -2,9 +2,10 @@
 Finite State Machine (FSM): State tracker for brackets, commas,
 and schema types in generation file
 """
+from pydantic import BaseModel, Field
+from typing import Optional
 from src.schemas import FunctionDef, ParameterSchema
 from enum import Enum, auto
-from typing import Optional
 
 
 class JSONState(Enum):
@@ -44,12 +45,12 @@ class JSONState(Enum):
     DONE = auto()                    # Generation is complete
 
 
-class StateMachine:
-    def __init__(self, schemas: list[FunctionDef]) -> None:
-        self.schemas = schemas
-        self.state: JSONState = JSONState.EXPECT_ROOT_BRACE
-        self.curr_func_call: Optional[FunctionDef] = None
-        self.curr_param: Optional[ParameterSchema] = None
+class StateMachine(BaseModel):
+    schemas: list[FunctionDef]
+    state: JSONState = JSONState.EXPECT_ROOT_BRACE
+    curr_func_call: Optional[FunctionDef] = None
+    curr_param: Optional[ParameterSchema] = None
+    generated_params: set[str] = Field(default_factory=set)
 
     def update_state(self, generated_text: str) -> None:
         """
@@ -88,12 +89,16 @@ class StateMachine:
                 if clean_text == "{":
                     self.state = JSONState.EXPECT_PARAM_KEY
             case JSONState.EXPECT_PARAM_KEY:
-                param = clean_text.strip('"')
-                if (self.curr_func_call is None or
-                        param not in self.curr_func_call.parameters):
-                    raise ValueError(f"Invalid parameter '{param}' generated.")
-                self.curr_param = self.curr_func_call.parameters[param]
-                self.state = JSONState.EXPECT_PARAM_COLON
+                if clean_text == "}":
+                    self.state = JSONState.EXPECT_ROOT_CLOSE_BRACE
+                else:
+                    param = clean_text.strip('"')
+                    if (self.curr_func_call is None or
+                            param not in self.curr_func_call.parameters):
+                        raise ValueError(f"Invalid parameter '{param}'")
+                    self.curr_param = self.curr_func_call.parameters[param]
+                    self.generated_params.add(param)
+                    self.state = JSONState.EXPECT_PARAM_COLON
             case JSONState.EXPECT_PARAM_COLON:
                 if clean_text == ":":
                     self.state = JSONState.EXPECT_PARAM_VALUE
@@ -142,7 +147,8 @@ class StateMachine:
                         allowed = list(string.digits)
                         allowed.extend([f" {d}" for d in string.digits])
                         allowed.extend(["-", " -"])
-                        if self.curr_param.type == "number":
+                        if (self.curr_param and
+                                self.curr_param.type == "number"):
                             allowed.extend([".", " ."])
                         allowed.extend([",", " ,", "}", " }"])
                         return allowed
@@ -160,22 +166,32 @@ class StateMachine:
                 return allowed
             case JSONState.EXPECT_PARAM_KEY:
                 allowed = []
+                missing_params = False
                 if self.curr_func_call is not None:
                     for key in self.curr_func_call.parameters.keys():
-                        allowed.extend([
-                            f'"{key}"',
-                            f' "{key}"',
-                            f'\n"{key}"',
-                            f'\n "{key}"'
-                        ])
-                allowed.extend(["}", " }", "\n}", "\n }"])
+                        if key not in self.generated_params:
+                            missing_params = True
+                            allowed.extend([
+                                f'"{key}"',
+                                f' "{key}"',
+                                f'\n"{key}"',
+                                f'\n "{key}"'
+                            ])
+                if not missing_params:
+                    allowed.extend(["}", " }", "\n}", "\n }"])
                 return allowed
             case JSONState.EXPECT_COMMA_OR_CLOSE:
-                return [",", " ,", "}", " }"]
+                missing_params = False
+                if self.curr_func_call is not None:
+                    missing_params = (len(self.generated_params) <
+                                      len(self.curr_func_call.parameters))
+                if missing_params:
+                    return [",", " ,", ",\n", " ,\n"]
+                return ["}", " }", "\n}", "\n }"]
             case (JSONState.EXPECT_NAME_COLON |
                   JSONState.EXPECT_PARAMS_COLON |
                   JSONState.EXPECT_PARAM_COLON):
-                return [":", " :"]
+                return [":", " :", ": ", " : "]
             case JSONState.EXPECT_COMMA:
                 return [",", " ,", ",\n", " ,\n"]
             case JSONState.EXPECT_PARAMS_KEY:
@@ -186,3 +202,10 @@ class StateMachine:
             case JSONState.DONE:
                 return []
         return []
+
+    def reset(self) -> None:
+        """Restores the FSM to its initial state for a new generation."""
+        self.state = JSONState.EXPECT_ROOT_BRACE
+        self.curr_func_call = None
+        self.curr_param = None
+        self.generated_params.clear()   # Clear memory on reset

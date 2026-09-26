@@ -1,0 +1,46 @@
+method generate(prompt_text):
+    
+    // Preparation
+    tell the FSM to reset its state to the beginning
+    create an empty list to store the final generated tokens
+    
+    // The Main Loop
+    while the FSM state is NOT equal to DONE:
+        
+        // ==========================================
+        // PHASE A: Gather the Constraints
+        // ==========================================
+        
+        // 1. Ask the FSM what human text is allowed right now
+        legal_strings = fsm.get_allowed_strings()
+        
+        // 2. Translate human text into LLM vocabulary IDs
+        allowed_ids = vocab_trie.search_allowed_tokens(legal_strings)
+        
+        // 3. Failsafe for vocabulary mismatches
+        if allowed_ids is empty:
+            raise an error "Model vocabulary cannot generate the required strings"
+
+        
+        # ==========================================
+        # PHASE B: Model Generation
+        # ==========================================
+        
+        # 1. Generate the next token. 
+        # (The exact method name depends on how your Small_LLM_Model is built, 
+        # but it MUST accept the allowed_tokens list to mask out invalid choices).
+        next_token_id = self.model.generate_next_token(
+            current_context=prompt, 
+            allowed_ids=allowed_tokens
+        )
+        
+        # 2. Store the winning ID in your list
+        TOKENS.append(next_token_id)
+        
+        # 3. Translate the ID back into human-readable text using your LUT
+        next_token_text = self.lut.get(next_token_id)
+        
+        # 4. Append the newly generated text to the prompt.
+        # This is critical! On the next loop, the model needs to "see" 
+        # what it just typed so it knows how to continue.
+        prompt += next_token_text
