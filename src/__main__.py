@@ -2,7 +2,7 @@ from llm_sdk import Small_LLM_Model
 import argparse
 from src.loaders import parse_file
 from src.pipeline import Pipeline
-from src import ft_time
+# from src import ft_time
 
 
 def ArgsParser() -> argparse.Namespace:
@@ -40,15 +40,14 @@ def ArgsParser() -> argparse.Namespace:
     return args
 
 
-@ft_time
 def main() -> None:
     """
     Main function to create and use the llm model and the pipeline
     """
     import time
     import sys
-    start = time.time()
     ARGS = ArgsParser()
+    start = time.time()
     try:
         prompts = parse_file(
             path=ARGS.input,
@@ -58,18 +57,27 @@ def main() -> None:
             type="definitions"
         )
         pipeline = Pipeline(model=Small_LLM_Model(ARGS.model),
-                            func_call=functions_calling)
+                            func_call=functions_calling,
+                            output_path=ARGS.output)
+        begin = time.time()
         for i, prom in enumerate(prompts, start=1):
             print(f"testing Prompt pipeline nbr: {i}")
             print(f"Prompt: {prom.prompt}")
             start = time.time()
-            pipeline.generate(prompt=prom.prompt)
+            gen = pipeline.generate(prompt=prom.prompt)
+            pipeline.json_file_loader(prompt_text=prom.prompt,
+                                      generated_str=gen)
             print("\n")
             end = time.time()
             time_structure = time.gmtime(end - start)
             formatted_string = time.strftime("%M:%S", time_structure)
             print(f"Time of excution: {formatted_string}")
             print("----" * 35)
+
+        end = time.time()
+        time_structure = time.gmtime(end - begin)
+        string = time.strftime("%M:%S", time_structure)
+        print(f"Total time of processing: {string}")
     except Exception as e:
         print(f"\033[31m Error: {e}\033[0m")
     except KeyboardInterrupt:

@@ -28,6 +28,18 @@ found at: {path}")
     return data
 
 
+def clean_token_text(token_str: str) -> str:
+    """
+    Normalizes BPE and SentencePiece whitespace markers into standard ASCII
+    """
+    return (
+        token_str.replace("Ġ", " ")   # Qwen / GPT-2 space (\u0120)
+        .replace("Ċ", "\n")           # Qwen / GPT-2 newline (\u010a)
+        .replace("ĉ", "\t")           # Qwen / GPT-2 tab (\u0109)
+        .replace("\u2581", " ")       # SentencePiece space (▁)
+    )
+
+
 def load_vocab_lut(model: Small_LLM_Model) -> tuple[dict[int, str],
                                                     dict[str, int]]:
     """
@@ -37,5 +49,5 @@ def load_vocab_lut(model: Small_LLM_Model) -> tuple[dict[int, str],
     vocab: dict[str, int] = {}
     with open(path, "r", encoding="utf-8") as f:
         vocab = json.load(f)
-    lut: dict[int, str] = {v: k for k, v in vocab.items()}
+    lut: dict[int, str] = {v: clean_token_text(k) for k, v in vocab.items()}
     return lut, vocab

@@ -5,6 +5,7 @@ from src.schemas import FunctionDef
 from src.constrained_decode import VocabularyTrie
 from src.loaders import load_vocab_lut
 from src.fsm import StateMachine, JSONState
+import numpy as np
 
 
 class Pipeline(BaseModel):
@@ -15,84 +16,100 @@ class Pipeline(BaseModel):
     vocab: dict[str, int] = {}
     vocab_trie: Any = None
     fsm: Any = None
+    output_path: str
 
     # Split caches by exit route (comma vs brace)
-    string_tokens_comma: list[int] = []
-    string_tokens_brace: list[int] = []
-    number_tokens_comma: list[int] = []
-    number_tokens_brace: list[int] = []
+    string_tokens_comma: Any = []
+    string_tokens_brace: Any = []
+    number_tokens_comma: Any = []
+    number_tokens_brace: Any = []
+    quote_exit_tokens: set[int] = set()
 
     def model_post_init(self, __context: Any) -> None:
         """
         Pydantic's built-in way to run code immediately after initialization.
         Pre-computes token caches split by exit route (comma vs brace).
         """
+        import string
+        from pathlib import Path
+
         self.lut, self.vocab = load_vocab_lut(self.model)
         self.vocab_trie = VocabularyTrie()
-        self.vocab_trie.build_from_lut(self.vocab)
+        self.vocab_trie.build_from_lut(self.lut)
         self.fsm = StateMachine(schemas=self.func_call)
-        
-        import string
-        
+        Path(self.output_path).unlink(missing_ok=True)
+
         # --- STRING TOKEN CACHES (split by exit route) ---
         # For comma route: allow ", but NOT "}
         string_comma_candidates = []
         # For brace route: allow "}, but NOT ",
         string_brace_candidates = []
-        
+
         for tid, text in self.lut.items():
+            if any(c in text for c in ("\n", "\r", "\t", "\x00")):
+                continue
             if '"' in text:
-                clean = text.strip(" Ġ\u2581\n\t")
+                clean = text.rstrip()
                 if clean == '"':
-                    # Pure quote allowed in both routes
                     string_comma_candidates.append(tid)
                     string_brace_candidates.append(tid)
+                    self.quote_exit_tokens.add(tid)
                 elif clean == '",':
-                    # Bundled quote+comma only in comma route
                     string_comma_candidates.append(tid)
+                    self.quote_exit_tokens.add(tid)
                 elif clean == '"}':
-                    # Bundled quote+brace only in brace route
                     string_brace_candidates.append(tid)
+                    self.quote_exit_tokens.add(tid)
             else:
                 # Non-quote tokens allowed in both
                 string_comma_candidates.append(tid)
                 string_brace_candidates.append(tid)
-        
+
         self.string_tokens_comma = string_comma_candidates
         self.string_tokens_brace = string_brace_candidates
-        
+
         # --- NUMBER TOKEN CACHES (split by exit route) ---
-        number_charset = set(string.digits + " -.,}Ġ\u2581\n")
+        number_charset = set(string.digits + " -.")
         raw_num_tokens = self.vocab_trie.search_by_charset(number_charset)
-        
+
         # For comma route: allow all number chars + comma, but NOT standalone }
         comma_exit_tokens = self.vocab_trie.search_allowed_tokens([",", " ,", ",\n", " ,\n"])
         self.number_tokens_comma = raw_num_tokens + comma_exit_tokens
-        
-        # For brace route: allow all number chars + close brace, but NOT standalone ,
+
+        # For brace route: allow all number chars + close brace, but NOT
+        # standalone ,
         brace_exit_tokens = self.vocab_trie.search_allowed_tokens(["}", " }", "\n}", "\n }"])
         self.number_tokens_brace = raw_num_tokens + brace_exit_tokens
 
+        
+        self.string_tokens_comma = np.array(string_comma_candidates, dtype=np.int64)
+        self.string_tokens_brace = np.array(string_brace_candidates, dtype=np.int64)
+
+        self.number_tokens_comma = np.array(raw_num_tokens + comma_exit_tokens, dtype=np.int64)
+        self.number_tokens_brace = np.array(raw_num_tokens + brace_exit_tokens, dtype=np.int64)
+
     def _get_best_token_by_logits(self, logits: list[float],
-                                  allowed: list[int],
+                                  allowed: list[int] | Any,
                                   context: list[int]) -> int:
-        """
-        Finds the allowed token with the highest logit score,
-        applying a repetition penalty."""
-        penalty = 1.2  # Standard penalty multiplier
+        """Finds the allowed token with the highest logit score."""
 
-        # Grab the last 40 tokens to check for loops
-        recent_tokens = set(context[-40:])
+        logits_np = np.asarray(logits, dtype=np.float32)
 
-        for tid in recent_tokens:
-            # Artificially suppress the score of recently used tokens
-            if logits[tid] > 0:
-                logits[tid] /= penalty
-            else:
-                logits[tid] *= penalty
+        # SELECTIVE PENALTY: Only apply inside strings, and exempt closing quotes
+        if self.fsm.state == JSONState.EXPECT_STRING_CONTENT:
+            penalty = 1.2
+            recent_tokens = set(context[-40:]) - self.quote_exit_tokens
+            for tid in recent_tokens:
+                if logits_np[tid] > 0:
+                    logits_np[tid] /= penalty
+                else:
+                    logits_np[tid] *= penalty
 
-        # Python's optimized built-in max function
-        return max(allowed, key=lambda tid: logits[tid])
+        # Fancy indexing in C: Extracts only the allowed logits and finds the max
+        allowed_np = np.asarray(allowed, dtype=np.int64)
+        best_idx = int(np.argmax(logits_np[allowed_np]))
+        
+        return int(allowed_np[best_idx])
 
     def _build_system_prompt(self, user: str) -> str:
         """
@@ -128,10 +145,22 @@ class Pipeline(BaseModel):
         system = self._build_system_prompt(prompt)
         tensor = self.model.encode(system)   # tokenizer prompt
         TOKENS = tensor[0].tolist()  # list of al the tokens (prompt)
-        tensor_id_lenght = len(TOKENS)
         accumulator = ""  # str that will be in the output
+        json_full_output = ""
         
         while self.fsm.state is not JSONState.DONE:
+            # === 1. DETERMINISTIC BYPASS ===
+            det_str = self.fsm.get_deterministic_string()
+            if det_str is not None:
+                chunk_ids = self.model.encode(det_str)[0].tolist()
+                TOKENS.extend(chunk_ids)
+                json_full_output += det_str
+                print(det_str, end="", flush=True)
+
+                self.fsm.update_state(det_str)
+                accumulator = ""
+                continue
+
             allowed = self.fsm.get_allowed_strings()
 
             is_open_ended = False
@@ -168,7 +197,7 @@ class Pipeline(BaseModel):
                 allowed_tokens = self.vocab_trie.search_allowed_tokens(
                     remainders)
 
-            if not allowed_tokens:
+            if len(allowed_tokens) == 0:
                 raise ValueError("Model cannot generate the required strings")
 
             logits = self.model.get_logits_from_input_ids(TOKENS)
@@ -179,8 +208,9 @@ class Pipeline(BaseModel):
             # Translate the token ID back to text to see what the model chose
             next_token_text = self.lut.get(next_token, "")
             accumulator += next_token_text
+            json_full_output += next_token_text
             print(next_token_text, end="", flush=True)
-            
+
             # === TRIGGER FSM TRANSITIONS WITH VALIDATED CASCADE ===
             if is_open_ended:
                 # In open-ended states, transition when the exit character is generated
@@ -192,7 +222,7 @@ class Pipeline(BaseModel):
                     self.fsm.update_state('"')
                     
                     # Cascade the leftover character ONLY if the FSM allows it
-                    after_quote = accumulator[exit_idx + 1:].strip(" \n\tĠ\u2581")
+                    after_quote = accumulator[exit_idx + 1:].strip()
                     if after_quote and after_quote in self.fsm.get_allowed_strings():
                         self.fsm.update_state(after_quote)
                     
@@ -204,18 +234,56 @@ class Pipeline(BaseModel):
                     exit_idx = accumulator.index(exit_char)
                     # Transition on the exit character
                     self.fsm.update_state(exit_char)
-                    
+
                     # Cascade the leftover number exits ONLY if the FSM allows it
-                    after_num = accumulator[exit_idx + 1:].strip(" \n\tĠ\u2581")
+                    after_num = accumulator[exit_idx + 1:].strip()
                     if after_num and after_num in self.fsm.get_allowed_strings():
                         self.fsm.update_state(after_num)
-                    
+
                     accumulator = ""
             else:
                 # In strict states, transition when the exact string is completed
                 if accumulator in allowed:
                     self.fsm.update_state(accumulator)
                     accumulator = ""
-                    
-        gen_tokens = TOKENS[tensor_id_lenght:]
-        return self.model.decode(gen_tokens)
+
+        return json_full_output
+
+    def json_file_loader(self, prompt_text: str, generated_str: str) -> None:
+        """Stores a single generated prompt result into the JSON file."""
+        import json
+        from pathlib import Path
+
+        file_path = Path(self.output_path)
+
+        # Create parent directories safely without crashing
+        # if they already exist
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        # Attempt to parse the LLM output into a dictionary
+        try:
+            parsed_output = json.loads(generated_str)
+        except json.JSONDecodeError:
+            parsed_output = {}
+
+        # Construct the exact object required by the assignment
+        new_entry = {
+            "prompt": prompt_text,
+            "name": parsed_output.get("name", ""),
+            "parameters": parsed_output.get("parameters", {})
+        }
+        data = []
+        # If the file exists, read its current contents
+        if file_path.exists():
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except json.JSONDecodeError:
+                # If the existing file is corrupted, start fresh
+                pass
+
+        # Append the new prompt's result
+        data.append(new_entry)
+
+        # Overwrite the file with the updated array
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)

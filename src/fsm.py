@@ -186,14 +186,14 @@ class StateMachine(BaseModel):
                     missing_params = (len(self.generated_params) <
                                       len(self.curr_func_call.parameters))
                 if missing_params:
-                    return [",", " ,", ",\n", " ,\n"]
-                return ["}", " }", "\n}", "\n }"]
+                    return [",", ", ", ",\n"]
+                return ["}", " }", "\n}"]
             case (JSONState.EXPECT_NAME_COLON |
                   JSONState.EXPECT_PARAMS_COLON |
                   JSONState.EXPECT_PARAM_COLON):
-                return [":", " :", ": ", " : "]
+                return [":", ": "]
             case JSONState.EXPECT_COMMA:
-                return [",", " ,", ",\n", " ,\n"]
+                return [",", ", ", ",\n"]
             case JSONState.EXPECT_PARAMS_KEY:
                 return ['"parameters"', ' "parameters"', '\n"parameters"',
                         '\n "parameters"']
@@ -209,3 +209,31 @@ class StateMachine(BaseModel):
         self.curr_func_call = None
         self.curr_param = None
         self.generated_params.clear()   # Clear memory on reset
+
+    def get_deterministic_string(self) -> str | None:
+        """Returns the mandatory string for strictly deterministic states."""
+        match self.state:
+            case JSONState.EXPECT_ROOT_BRACE | JSONState.EXPECT_PARAMS_DICT_BRACE:
+                return "{"
+            case JSONState.EXPECT_NAME_KEY:
+                return '"name"'
+            case JSONState.EXPECT_NAME_COLON | JSONState.EXPECT_PARAMS_COLON | JSONState.EXPECT_PARAM_COLON:
+                return ": "
+            case JSONState.EXPECT_COMMA:
+                return ", "
+            case JSONState.EXPECT_PARAMS_KEY:
+                return '"parameters"'
+            case JSONState.EXPECT_ROOT_CLOSE_BRACE:
+                return "}"
+            case JSONState.EXPECT_PARAM_KEY:
+                if self.curr_func_call:
+                    for key in self.curr_func_call.parameters.keys():
+                        if key not in self.generated_params:
+                            return f'"{key}"'
+                    return "}"
+            case JSONState.EXPECT_COMMA_OR_CLOSE:
+                if self.curr_func_call:
+                    missing = len(self.generated_params) < len(self.curr_func_call.parameters)
+                    return ", " if missing else "}"
+            case _:
+                return None
