@@ -5,11 +5,14 @@ OUTPUT ?= ./data/output/function_calls.json
 all: install run
 
 install:
-	uv venv
-	uv pip install  pydantic numpy flake8 
-	uv pip install -e llm_sdk
+	uv sync
+
 run:
 	uv run python -m src --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
+
+run-new:
+	uv run python -m new --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
+
 clean:
 	@find . -type f -name "*.pyc" -delete
 	@find . -type f -name "*.pyo" -delete
@@ -28,3 +31,8 @@ lint:
 	mypy --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs srcmake
 
 .PHONY = install run clean debug lint
+
+
+#uv venv
+#uv pip install  pydantic numpy flake8 
+#uv pip install -e llm_sdk
