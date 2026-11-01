@@ -60,7 +60,7 @@ def main() -> None:
                             func_call=functions_calling,
                             output_path=ARGS.output)
         begin = time.time()
-        for i, prom in enumerate(prompts, start=1):
+        for i, prom in enumerate(prompts[8:], start=1):
             print(f"testing Prompt pipeline nbr: {i}")
             print(f"Prompt: {prom.prompt}")
             start = time.time()

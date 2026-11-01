@@ -6,6 +6,9 @@ from src.constrained_decode import VocabularyTrie
 from src.loaders import load_vocab_lut
 from src.fsm import StateMachine, JSONState
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Pipeline(BaseModel):
@@ -73,42 +76,57 @@ class Pipeline(BaseModel):
         raw_num_tokens = self.vocab_trie.search_by_charset(number_charset)
 
         # For comma route: allow all number chars + comma, but NOT standalone }
-        comma_exit_tokens = self.vocab_trie.search_allowed_tokens([",", " ,", ",\n", " ,\n"])
+        comma_exit_tokens = self.vocab_trie.search_allowed_tokens(
+            [",", " ,", ",\n", " ,\n"])
         self.number_tokens_comma = raw_num_tokens + comma_exit_tokens
 
         # For brace route: allow all number chars + close brace, but NOT
         # standalone ,
-        brace_exit_tokens = self.vocab_trie.search_allowed_tokens(["}", " }", "\n}", "\n }"])
+        brace_exit_tokens = self.vocab_trie.search_allowed_tokens(
+            ["}", " }", "\n}", "\n }"])
         self.number_tokens_brace = raw_num_tokens + brace_exit_tokens
 
-        
-        self.string_tokens_comma = np.array(string_comma_candidates, dtype=np.int64)
-        self.string_tokens_brace = np.array(string_brace_candidates, dtype=np.int64)
+        self.string_tokens_comma = np.array(string_comma_candidates,
+                                            dtype=np.int64)
+        self.string_tokens_brace = np.array(string_brace_candidates,
+                                            dtype=np.int64)
 
-        self.number_tokens_comma = np.array(raw_num_tokens + comma_exit_tokens, dtype=np.int64)
-        self.number_tokens_brace = np.array(raw_num_tokens + brace_exit_tokens, dtype=np.int64)
+        self.number_tokens_comma = np.array(raw_num_tokens + comma_exit_tokens,
+                                            dtype=np.int64)
+        self.number_tokens_brace = np.array(raw_num_tokens + brace_exit_tokens,
+                                            dtype=np.int64)
 
     def _get_best_token_by_logits(self, logits: list[float],
                                   allowed: list[int] | Any,
-                                  context: list[int]) -> int:
-        """Finds the allowed token with the highest logit score."""
+                                  value_tokens: list[int]) -> int:
+        """
+        Finds the allowed token with the highest logit score.
+        """
 
         logits_np = np.asarray(logits, dtype=np.float32)
 
-        # SELECTIVE PENALTY: Only apply inside strings, and exempt closing quotes
-        if self.fsm.state == JSONState.EXPECT_STRING_CONTENT:
+        # SELECTIVE PENALTY: only apply inside strings, only once a token
+        # has genuinely started looping within THIS value (not on first
+        # reuse), and exempt the tokens that close the string.
+        if (self.fsm.state == JSONState.EXPECT_STRING_CONTENT
+                and value_tokens):
             penalty = 1.2
-            recent_tokens = set(context[-40:]) - self.quote_exit_tokens
-            for tid in recent_tokens:
+            loop_threshold = 3
+            counts: dict[int, int] = {}
+            for tid in value_tokens:
+                counts[tid] = counts.get(tid, 0) + 1
+            for tid, count in counts.items():
+                if count < loop_threshold or tid in self.quote_exit_tokens:
+                    continue
                 if logits_np[tid] > 0:
                     logits_np[tid] /= penalty
                 else:
                     logits_np[tid] *= penalty
-
-        # Fancy indexing in C: Extracts only the allowed logits and finds the max
+        # Fancy indexing in C: Extracts only the allowed logits and finds
+        # the max
         allowed_np = np.asarray(allowed, dtype=np.int64)
         best_idx = int(np.argmax(logits_np[allowed_np]))
-        
+
         return int(allowed_np[best_idx])
 
     def _build_system_prompt(self, user: str) -> str:
@@ -139,7 +157,9 @@ class Pipeline(BaseModel):
         )
 
     def generate(self, prompt: str) -> str:
-        """Generate the function Calling for each prompt with validated cascade"""
+        """
+        Generate the function Calling for each prompt with validated cascade
+        """
         # resete the state to the beginning to seach for token "{"
         self.fsm.reset()
         system = self._build_system_prompt(prompt)
@@ -147,7 +167,11 @@ class Pipeline(BaseModel):
         TOKENS = tensor[0].tolist()  # list of al the tokens (prompt)
         accumulator = ""  # str that will be in the output
         json_full_output = ""
-        
+        # Tokens generated for the value currently in progress only (reset
+        # on every FSM transition) -- used for the repetition penalty so it
+        # never sees tokens from the system prompt or earlier values.
+        value_tokens: list[int] = []
+ 
         while self.fsm.state is not JSONState.DONE:
             # === 1. DETERMINISTIC BYPASS ===
             det_str = self.fsm.get_deterministic_string()
@@ -156,27 +180,28 @@ class Pipeline(BaseModel):
                 TOKENS.extend(chunk_ids)
                 json_full_output += det_str
                 print(det_str, end="", flush=True)
-
+ 
                 self.fsm.update_state(det_str)
                 accumulator = ""
+                value_tokens = []
                 continue
-
+ 
             allowed = self.fsm.get_allowed_strings()
-
+ 
             is_open_ended = False
             if (self.fsm.state == JSONState.EXPECT_STRING_CONTENT or
                     (self.fsm.state == JSONState.EXPECT_PARAM_VALUE and
                      self.fsm.curr_param and
                      self.fsm.curr_param.type in ("number", "integer"))):
                 is_open_ended = True
-
+ 
             if is_open_ended:
                 # DYNAMIC CACHE ROUTING: Ask FSM if we need comma or brace
                 missing_params = False
                 if self.fsm.curr_func_call:
                     missing_params = (len(self.fsm.generated_params) <
                                      len(self.fsm.curr_func_call.parameters))
-
+ 
                 # Route to the exact cache required to prevent illegal bundled tokens
                 if self.fsm.state == JSONState.EXPECT_STRING_CONTENT:
                     # In string, the exit route is determined by whether params are missing
@@ -196,21 +221,22 @@ class Pipeline(BaseModel):
                         remainders.append(remainder)
                 allowed_tokens = self.vocab_trie.search_allowed_tokens(
                     remainders)
-
+ 
             if len(allowed_tokens) == 0:
                 raise ValueError("Model cannot generate the required strings")
-
+ 
             logits = self.model.get_logits_from_input_ids(TOKENS)
             next_token = self._get_best_token_by_logits(logits=logits,
                                                         allowed=allowed_tokens,
-                                                        context=TOKENS)
+                                                        value_tokens=value_tokens)
             TOKENS.append(next_token)
+            value_tokens.append(next_token)
             # Translate the token ID back to text to see what the model chose
             next_token_text = self.lut.get(next_token, "")
             accumulator += next_token_text
             json_full_output += next_token_text
             print(next_token_text, end="", flush=True)
-
+ 
             # === TRIGGER FSM TRANSITIONS WITH VALIDATED CASCADE ===
             if is_open_ended:
                 # In open-ended states, transition when the exit character is generated
@@ -227,6 +253,7 @@ class Pipeline(BaseModel):
                         self.fsm.update_state(after_quote)
                     
                     accumulator = ""
+                    value_tokens = []
                     
                 elif (self.fsm.state == JSONState.EXPECT_PARAM_VALUE and
                       ("," in accumulator or "}" in accumulator)):
@@ -234,23 +261,27 @@ class Pipeline(BaseModel):
                     exit_idx = accumulator.index(exit_char)
                     # Transition on the exit character
                     self.fsm.update_state(exit_char)
-
+ 
                     # Cascade the leftover number exits ONLY if the FSM allows it
                     after_num = accumulator[exit_idx + 1:].strip()
                     if after_num and after_num in self.fsm.get_allowed_strings():
                         self.fsm.update_state(after_num)
 
                     accumulator = ""
+                    value_tokens = []
             else:
                 # In strict states, transition when the exact string is completed
                 if accumulator in allowed:
                     self.fsm.update_state(accumulator)
                     accumulator = ""
+                    value_tokens = []
 
         return json_full_output
 
     def json_file_loader(self, prompt_text: str, generated_str: str) -> None:
-        """Stores a single generated prompt result into the JSON file."""
+        """
+        Stores a single generated prompt result into the JSON file.
+        """
         import json
         from pathlib import Path
 

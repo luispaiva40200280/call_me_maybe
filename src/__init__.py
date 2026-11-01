@@ -7,9 +7,10 @@ def ft_time(func: Callable) -> Callable:
     @wraps(func)
     def timer(*args: Any, **kwargs) -> Any:
         start = time()
-        func(*args, **kwargs)
+        result = func(*args, **kwargs)
         end = time()
-        time_structure = time.gmtime(end - start)
-        string = time.strftime("%M:%S", time_structure)
+        timed = time.gmtime(end - start)
+        string = time.strftime("%M:%S", timed)
         print(f"Total time of processing: {string}")
+        return result
     return timer
