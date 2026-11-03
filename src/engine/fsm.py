@@ -3,8 +3,8 @@ Finite State Machine (FSM): State tracker for brackets, commas,
 and schema types in generation file.
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List
-from src.schemas import FunctionDef, ParameterSchema
+from typing import Optional
+from src.decoding.schemas import FunctionDef, ParameterSchema
 from enum import Enum, auto
 import string
 
@@ -51,7 +51,7 @@ class StateMachine(BaseModel):
         to restrict logits and output for valid JSON structure.
         """
         clean_text = generated_text.strip()
-        
+
         match self.state:
             case JSONState.EXPECT_ROOT_BRACE:
                 if clean_text == "{":

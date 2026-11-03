@@ -1,54 +1,13 @@
-from llm_sdk import Small_LLM_Model
+# from src.data_loader.loaders import parse_file
+from src.engine.pipeline import Pipeline
+from .decoding import PromptSchema, FunctionDef
 import argparse
-from src.loaders import parse_file
-from src.pipeline import Pipeline
-# from src import ft_time
+import sys
+from . import ft_time
 
-
-def ArgsParser() -> argparse.Namespace:
-    """
-        Parser for the arguments needed to use the LLM
-
-        RETURNS
-            args (argparse.Namespace): arguments for the lllm function calling
-    """
-    parser = argparse.ArgumentParser(description="LLM Function Calling Tool")
-    parser.add_argument(
-        "--functions_definition",
-        type=str,
-        default="data/input/functions_definition.json",
-        help="Path to the functions definition JSON file",
-    )
-    parser.add_argument(
-        "--input",
-        type=str,
-        default="data/input/function_calling_tests.json",
-        help="Path to the input tests JSON file",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="data/output/function_calling_results.json",
-        help="Path to save the output JSON results",
-    )
-    parser.add_argument(
-        "--model",
-        default="Qwen/Qwen3-0.6B",
-        help="Name of the language model to use"
-    )
-    args = parser.parse_args()
-    return args
-
-
-def main() -> None:
-    """
-    Main function to create and use the llm model and the pipeline
-    """
-    import time
-    import sys
-    ARGS = ArgsParser()
-    start = time.time()
-    try:
+"""
+def run_pipeline(prompts: list[any], funcs: list[any]) -> None:
+       try:
         prompts = parse_file(
             path=ARGS.input,
             type="prompt")
@@ -66,7 +25,7 @@ def main() -> None:
             start = time.time()
             gen = pipeline.generate(prompt=prom.prompt)
             pipeline.json_file_loader(prompt_text=prom.prompt,
-                                      generated_str=gen)
+                                        generated_str=gen)
             print("\n")
             end = time.time()
             time_structure = time.gmtime(end - start)
@@ -82,6 +41,55 @@ def main() -> None:
         print(f"\033[31m Error: {e}\033[0m")
     except KeyboardInterrupt:
         sys.exit(0)
+"""
+
+
+@ft_time
+def load_imports(ARGS: argparse.Namespace) -> tuple[
+                    list[PromptSchema], list[FunctionDef]]:
+    """
+    """
+    from .data_loader import load_prompt_data, load_func_data
+
+    prompts = load_prompt_data(path=ARGS.input)
+    func_calling = load_func_data(path=ARGS.functions_definition)
+
+    return (prompts, func_calling)
+
+
+def main() -> None:
+    """
+    Main function to create, use the llm model and the pipeline
+    """
+    from .data_loader import ArgsParser
+    from llm_sdk import Small_LLM_Model
+
+    # loading all data necessary to use the pipeline
+    try:
+        ARGS = ArgsParser()
+        prompts, func_calling = load_imports(ARGS=ARGS)
+    except ValueError as err:
+        for index, e in enumerate(err.errors(), start=1):
+            print(f"({index})\033[31m Error:\033[0m {e["msg"]}\n")
+        sys.exit(1)
+    except (FileExistsError, FileNotFoundError) as e:
+        print(f"\033[31m Error:\033[0m {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(0)
+
+    # loading the pipeline and using it
+    try:
+        PIPELINE = Pipeline(
+            model=Small_LLM_Model(model_name=ARGS.model),
+            func_call=func_calling,
+            output_path=ARGS.output
+        )
+        for p in prompts:
+            PIPELINE.generate(p.prompt)
+            print("\n")
+    except Exception as e:
+        print(e)
 
 
 if __name__ == "__main__":

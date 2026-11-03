@@ -1,31 +1,32 @@
 """Loading the info/data of json files and llm data"""
-from src.schemas import FunctionDef, PromptSchema
+from src.decoding.schemas import FunctionDef, PromptSchema
 from pathlib import Path
-from typing import Any
 from llm_sdk import Small_LLM_Model
 import json
 
 
-def parse_file(path: str, type: str) -> list[Any]:
+def load_func_data(path: str) -> list[FunctionDef]:
     """
-    Safely loads the JSON file.
-    Returns:
-        data (list[dict[str, Any]])
     """
+
     path_file = Path(path)
     if not path_file.exists():
-        raise FileNotFoundError(f"The {type} file was not \
-found at: {path}")
+        raise FileNotFoundError(f"The file was not found at: {path}")
     with open(path_file, 'r', encoding="utf-8") as file:
         data = json.load(file)
+    return [FunctionDef(**def_func) for def_func in data]
 
-    # validate the data and change it to Pydantic module
-    if type == "prompt":
-        return [PromptSchema(**prompt) for prompt in data]
-    elif type == "definitions":
-        return [FunctionDef(**def_func) for def_func in data]
 
-    return data
+def load_prompt_data(path: str) -> list[PromptSchema]:
+    """
+    """
+
+    path_file = Path(path)
+    if not path_file.exists():
+        raise FileNotFoundError(f"The file was not found at: {path}")
+    with open(path_file, 'r', encoding="utf-8") as file:
+        data = json.load(file)
+    return [PromptSchema(**prompt) for prompt in data]
 
 
 def clean_token_text(token_str: str) -> str:
