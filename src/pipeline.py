@@ -221,34 +221,6 @@ class Pipeline(BaseModel):
 
         return int(allowed_np[best_idx])
 
-    def _build_system_prompt(self, user: str) -> str:
-        """
-            Formats the available tool schemas and the user request into
-            a single prompt.
-        """
-
-        fn_defs_lines: list[str] = []
-        for fn in self.func_call:
-            # Format parameters compactly: a: number, b: number
-            param_parts = []
-            for param_name, param_schema in fn.parameters.items():
-                param_parts.append(f"{param_name}: {param_schema.type}")
-            params_str = ", ".join(param_parts)
-
-            # Format the function signature
-            fn_defs_lines.append(f"- {fn.name}({params_str}):\
- {fn.description}")
-
-        fn_defs_block = "\n".join(fn_defs_lines)
-        # Truncated the hardcoded JSON so the FSM can generate the root brace
-        return (
-            "You are a function calling assistant.\n\n"
-            "Available functions:\n"
-            f"{fn_defs_block}\n\n"
-            f"User request: {user}\n\n"
-            "Output the correct function call as JSON:\n"
-        )
-
     def generate(self, prompt: str, max_tokens: int = 256,
                  max_value_tokens: int = 12) -> str:
         """
