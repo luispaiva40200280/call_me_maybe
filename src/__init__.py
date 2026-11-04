@@ -11,6 +11,6 @@ def ft_time(func: Callable) -> Callable:
         end = time.time()
         timed = time.gmtime(end - start)
         string = time.strftime("%M:%S", timed)
-        print(f"Total time of processing: {string}")
+        print(f"\nTotal time of processing: {string}")
         return result
     return timer

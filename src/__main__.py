@@ -44,7 +44,6 @@ def run_pipeline(prompts: list[any], funcs: list[any]) -> None:
 """
 
 
-@ft_time
 def load_imports(ARGS: argparse.Namespace) -> tuple[
                     list[PromptSchema], list[FunctionDef]]:
     """
@@ -57,6 +56,7 @@ def load_imports(ARGS: argparse.Namespace) -> tuple[
     return (prompts, func_calling)
 
 
+@ft_time
 def main() -> None:
     """
     Main function to create, use the llm model and the pipeline
@@ -76,6 +76,7 @@ def main() -> None:
         print(f"\033[31m Error:\033[0m {e}")
         sys.exit(1)
     except KeyboardInterrupt:
+        print("\033[32mKeybord Interropt with success\033[0m")
         sys.exit(0)
 
     # loading the pipeline and using it
@@ -86,10 +87,14 @@ def main() -> None:
             output_path=ARGS.output
         )
         for p in prompts:
-            PIPELINE.generate(p.prompt)
-            print("\n")
+            output = PIPELINE.generate(p.prompt)
+            PIPELINE.json_file_loader(p.prompt, generated_str=output)
+            print()
     except Exception as e:
         print(e)
+    except KeyboardInterrupt:
+        print("\n\033[32mKeybord Interrupt with success\033[0m")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

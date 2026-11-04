@@ -7,6 +7,7 @@ from src.data_loader.loaders import load_vocab_lut
 from src.engine.fsm import StateMachine, JSONState
 import numpy as np
 import logging
+from .. import ft_time
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,7 @@ class Pipeline(BaseModel):
 
         return int(allowed_np[best_idx])
 
+    @ft_time
     def generate(self, prompt: str, max_tokens: int = 256,
                  max_value_tokens: int = 12) -> str:
         """

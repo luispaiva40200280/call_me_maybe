@@ -12,7 +12,6 @@ import string
 class JSONState(Enum):
     """
     Tracks the grammatical steps required to generate a valid function call.
-    Example Target: {"name": "fn_add_numbers", "parameters": {"a": 2.0, "b": 3.0}}
     """
     # 1. Root Level Structure
     EXPECT_ROOT_BRACE = auto()       # '{'
@@ -34,7 +33,7 @@ class JSONState(Enum):
     EXPECT_COMMA_OR_CLOSE = auto()   # ',' or '}' after a string value
 
     # 4. Closing Structure
-    EXPECT_ROOT_CLOSE_BRACE = auto() # Final '}'
+    EXPECT_ROOT_CLOSE_BRACE = auto()  # Final '}'
     DONE = auto()                    # Generation complete
 
 
@@ -71,7 +70,8 @@ class StateMachine(BaseModel):
                     (func for func in self.schemas if func.name == name), None
                 )
                 if self.curr_func_call is None:
-                    raise ValueError(f"Invalid function name '{name}' generated.")
+                    raise ValueError(f"Invalid function name '{name}' \
+generated.")
                 self.state = JSONState.EXPECT_COMMA
 
             case JSONState.EXPECT_COMMA:
@@ -133,15 +133,16 @@ class StateMachine(BaseModel):
     def get_allowed_strings(self) -> list[str]:
         """Returns the legally allowed strings for the CURRENT state."""
         match self.state:
-            case JSONState.EXPECT_ROOT_BRACE | JSONState.EXPECT_PARAMS_DICT_BRACE:
+            case (JSONState.EXPECT_ROOT_BRACE |
+                    JSONState.EXPECT_PARAMS_DICT_BRACE):
                 return ["{", " {", "\n{"]
 
             case JSONState.EXPECT_NAME_KEY:
                 return ['"name"', ' "name"']
 
-            case (JSONState.EXPECT_NAME_COLON | 
-                  JSONState.EXPECT_PARAMS_COLON | 
-                  JSONState.EXPECT_PARAM_COLON):
+            case (JSONState.EXPECT_NAME_COLON |
+                    JSONState.EXPECT_PARAMS_COLON |
+                    JSONState.EXPECT_PARAM_COLON):
                 return [":", ": "]
 
             case JSONState.EXPECT_FUNCTION_NAME:
@@ -150,7 +151,8 @@ class StateMachine(BaseModel):
                     allowed.extend([f'"{func.name}"', f' "{func.name}"'])
                 return allowed
 
-            case JSONState.EXPECT_COMMA | JSONState.EXPECT_COMMA_OR_CLOSE:
+            case (JSONState.EXPECT_COMMA |
+                    JSONState.EXPECT_COMMA_OR_CLOSE):
                 missing_params = False
                 if self.curr_func_call is not None:
                     missing_params = len(self.generated_params) < len(
@@ -188,9 +190,11 @@ class StateMachine(BaseModel):
                 return allowed
 
             case JSONState.EXPECT_PARAM_VALUE:
-                if self.curr_param is not None and self.curr_param.type == "boolean":
+                if (self.curr_param is not None
+                        and self.curr_param.type == "boolean"):
                     return ["true", "false", " true", " false"]
-                elif self.curr_param is not None and self.curr_param.type in ("number", "integer"):
+                elif (self.curr_param is not None
+                        and self.curr_param.type in ("number", "integer")):
                     allowed = list(string.digits)
                     allowed.extend([f" {d}" for d in string.digits])
                     allowed.extend(["-", " -"])
@@ -198,7 +202,8 @@ class StateMachine(BaseModel):
                         allowed.extend([".", " ."])
                     allowed.extend([",", " ,", "}", " }"])
                     return allowed
-                elif self.curr_param is not None and self.curr_param.type == "string":
+                elif (self.curr_param is not None
+                        and self.curr_param.type == "string"):
                     return ['"', ' "']
                 return ['"', ' "']
 
@@ -225,12 +230,13 @@ class StateMachine(BaseModel):
     def get_deterministic_string(self) -> Optional[str]:
         """Returns the mandatory string for strictly deterministic states."""
         match self.state:
-            case JSONState.EXPECT_ROOT_BRACE | JSONState.EXPECT_PARAMS_DICT_BRACE:
+            case (JSONState.EXPECT_ROOT_BRACE |
+                    JSONState.EXPECT_PARAMS_DICT_BRACE):
                 return "{"
             case JSONState.EXPECT_NAME_KEY:
                 return '"name"'
-            case (JSONState.EXPECT_NAME_COLON | 
-                  JSONState.EXPECT_PARAMS_COLON | 
+            case (JSONState.EXPECT_NAME_COLON |
+                  JSONState.EXPECT_PARAMS_COLON |
                   JSONState.EXPECT_PARAM_COLON):
                 return ": "
             case JSONState.EXPECT_COMMA:

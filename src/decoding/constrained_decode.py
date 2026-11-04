@@ -6,16 +6,40 @@ from typing import Dict
 
 @dataclass
 class TrieNode:
-    """"""
+    """
+    A single node within the VocabularyTrie.
+
+    Attributes:
+        children (dict[str, TrieNode]): Mapping of a character to child Trie
+        nodes.
+        token_id (set[int]): Set of token IDs associated with this node.
+    """
     children: dict[str, 'TrieNode'] = dcfield(default_factory=dict)
     token_id: set[int] = dcfield(default_factory=set)
 
 
 class VocabularyTrie(BaseModel):
+    """
+    A prefix tree (trie) built from vocabulary lookups to efficiently search
+    and filter token IDs by prefix strings or character sets.
+
+    Attributes:
+        root (TrieNode): The root node of the trie.
+    """
     root: TrieNode = Field(default_factory=TrieNode)
 
     def insert(self, token_string: str, token_id: int) -> None:
         """
+        Inserts a token string and its corresponding token ID into the trie.
+
+        Args:
+            token_string (str): The string representation of the token to
+            insert.
+
+            token_id (int): The numeric ID associated with the token.
+
+        Returns:
+            None
         """
         curr_node = self.root
         for char in token_string:
@@ -26,7 +50,12 @@ class VocabularyTrie(BaseModel):
 
     def build_from_lut(self, lut: Dict[int, str]) -> None:
         """
-        Populates the entire Trie from the vocabulary dictionary.
+        Populates the entire trie from a vocabulary lookup table.
+        Args:
+            lut (Dict[int, str]): A dictionary mapping token IDs to their
+            string representations.
+        Returns:
+            None
         """
         for token_id, token_string in lut.items():
             self.insert(token_string, token_id)
@@ -34,7 +63,14 @@ class VocabularyTrie(BaseModel):
     def search_allowed_tokens(self, str_allowed: list[str]) -> list[int]:
         """"
         Searches the Trie for the allowed strings.
-        Returns Token IDs for exact matches AND valid partial prefixes.
+        Returns token IDs for exact matches as well as valid partial prefixes
+        founDalong the paths of the given strings.
+        Args:
+            str_allowed (list[str]): A list of allowed string prefixes
+            or words to search for.
+        Returns:
+            list[int]: A list of unique token IDs matching the allowed
+            prefixes or words.
         """
         valid: set = set()
         for word in str_allowed:
@@ -49,7 +85,15 @@ class VocabularyTrie(BaseModel):
 
     def search_by_charset(self, charset: set[str]) -> list[int]:
         """
-            Returns all Token IDs composed entirely of the allowed characters.
+        Finds all token IDs that can be formed entirely using characters
+        from a given set.
+
+        Args:
+            charset (set[str]): A set of allowed characters.
+
+        Returns:
+            list[int]: A list of unique token IDs composed solely
+            of characters from the charset.
         """
         valid: set[int] = set()
 

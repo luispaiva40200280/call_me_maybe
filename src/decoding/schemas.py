@@ -14,17 +14,13 @@ class ParameterSchema(BaseModel):
     def validate_parameter_schema(cls, value: str) -> str:
         """
         Validate the parameter input, check for errors
-
         Args:
             value (str): value to check and validate
-
         Raise:
             ValueError: validation of value is not valid
-
         Returns:
             value (str): returns its own value
         """
-
         valid_types: list[str] = ["string", "number", "integer", "boolean"]
         if value not in valid_types:
             raise ValueError(f"Invalid type '{value}' in ParameterSchema.")
