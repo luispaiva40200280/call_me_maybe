@@ -86,7 +86,8 @@ def main() -> None:
             func_call=func_calling,
             output_path=ARGS.output
         )
-        for p in prompts:
+        for i, p in enumerate(prompts, start=1):
+            print(f"({i}) user: {p.prompt}")
             output = PIPELINE.generate(p.prompt)
             PIPELINE.json_file_loader(p.prompt, generated_str=output)
             print()

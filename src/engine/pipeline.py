@@ -1,4 +1,7 @@
 # pipeline.py
+"""
+Future 
+"""
 from pydantic import BaseModel, ConfigDict
 from typing import Any
 from src.decoding import FunctionDef
@@ -201,7 +204,7 @@ class Pipeline(BaseModel):
         # SELECTIVE PENALTY: only apply inside strings, only once a token
         # has genuinely started looping within THIS value (not on first
         # reuse), and exempt the tokens that close the string.
-        if self.fsm.state == JSONState.EXPECT_STRING_CONTENT and value_tokens:
+        if self.fsm.curr_state == JSONState.EXPECT_STRING_CONTENT and value_tokens:
             penalty = 1.2
             loop_threshold = 3
             counts: dict[int, int] = {}
@@ -223,7 +226,7 @@ class Pipeline(BaseModel):
         return int(allowed_np[best_idx])
 
     @ft_time
-    def generate(self, prompt: str, max_tokens: int = 256,
+    def generate(self, prompt: str, max_tokens: int = 50,
                  max_value_tokens: int = 12) -> str:
         """
         Generate the function Calling for each prompt with validated cascade
@@ -252,7 +255,7 @@ class Pipeline(BaseModel):
         value_tokens: list[int] = []
         steps = 0
 
-        while self.fsm.state is not JSONState.DONE:
+        while self.fsm.curr_state is not JSONState.DONE:
             # === 1. DETERMINISTIC BYPASS ===
             det_str = self.fsm.get_deterministic_string()
             if det_str is not None:
@@ -270,27 +273,27 @@ class Pipeline(BaseModel):
             if steps > max_tokens:
                 raise ValueError(
                     f"Exceeded max_tokens={max_tokens} without completing "
-                    f"a valid function call (stuck in state {self.fsm.state})"
+                    f"a valid function call (stuck in state {self.fsm.curr_state})"
                 )
 
             allowed = self.fsm.get_allowed_strings()
 
             is_open_ended = False
-            if (self.fsm.state == JSONState.EXPECT_STRING_CONTENT or
-                    (self.fsm.state == JSONState.EXPECT_PARAM_VALUE and
-                     self.fsm.curr_param and
-                     self.fsm.curr_param.type in ("number", "integer"))):
+            if (self.fsm.curr_state == JSONState.EXPECT_STRING_CONTENT or
+                    (self.fsm.curr_state == JSONState.EXPECT_PARAM_VALUE and
+                     self.fsm.curr_single_param and
+                     self.fsm.curr_single_param.type in ("number", "integer"))):
                 is_open_ended = True
 
             if is_open_ended:
                 # DYNAMIC CACHE ROUTING: Ask FSM if we need comma or brace
                 missing_params = False
-                if self.fsm.curr_func_call:
+                if self.fsm.curr_func_calling:
                     missing_params = (len(self.fsm.generated_params) <
-                                     len(self.fsm.curr_func_call.parameters))
+                                     len(self.fsm.curr_func_calling.parameters))
 
                 # Route to the exact cache required to prevent illegal bundled tokens
-                if self.fsm.state == JSONState.EXPECT_STRING_CONTENT:
+                if self.fsm.curr_state == JSONState.EXPECT_STRING_CONTENT:
                     # In string, the exit route is determined by whether params are missing
                     is_first_token = len(value_tokens) == 0
                     if is_first_token:
@@ -317,8 +320,8 @@ class Pipeline(BaseModel):
                                  if t in self.quote_exit_tokens]
                         if forced:
                             allowed_tokens = np.array(forced, dtype=np.int64)
-                elif (self.fsm.curr_param is not None
-                        and self.fsm.curr_param.type == "integer"):
+                elif (self.fsm.curr_single_param is not None
+                        and self.fsm.curr_single_param.type == "integer"):
                     # Integers never get a '.' in their allowed set at
                     # all, so there's nothing to force here.
                     allowed_tokens = (self.integer_tokens_comma
@@ -375,7 +378,7 @@ class Pipeline(BaseModel):
             # === TRIGGER FSM TRANSITIONS WITH VALIDATED CASCADE ===
             if is_open_ended:
                 # In open-ended states, transition when the exit character is generated
-                if (self.fsm.state == JSONState.EXPECT_STRING_CONTENT
+                if (self.fsm.curr_state == JSONState.EXPECT_STRING_CONTENT
                         and '"' in accumulator):
                     # Find the quote position
                     exit_idx = accumulator.index('"')
@@ -390,7 +393,7 @@ class Pipeline(BaseModel):
                     accumulator = ""
                     value_tokens = []
                     
-                elif (self.fsm.state == JSONState.EXPECT_PARAM_VALUE and
+                elif (self.fsm.curr_state == JSONState.EXPECT_PARAM_VALUE and
                       ("," in accumulator or "}" in accumulator)):
                     exit_char = "," if "," in accumulator else "}"
                     exit_idx = accumulator.index(exit_char)
