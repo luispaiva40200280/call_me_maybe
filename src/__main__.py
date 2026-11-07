@@ -1,5 +1,4 @@
 # from src.data_loader.loaders import parse_file
-from src.engine.pipeline import Pipeline
 from .decoding import PromptSchema, FunctionDef
 import argparse
 import sys
@@ -63,6 +62,10 @@ def main() -> None:
     """
     from .data_loader import ArgsParser
     from llm_sdk import Small_LLM_Model
+    from src.engine.pipeline import Pipeline as LEGACY
+    from src.engine.fsm import StateMachine
+    from src.engine.genarator import Generator
+    from src.engine.new_pipeline import Pipeline as GeneratorPipeline
 
     # loading all data necessary to use the pipeline
     try:
@@ -81,18 +84,34 @@ def main() -> None:
 
     # loading the pipeline and using it
     try:
-        PIPELINE = Pipeline(
-            model=Small_LLM_Model(model_name=ARGS.model),
-            func_call=func_calling,
-            output_path=ARGS.output
-        )
-        for i, p in enumerate(prompts, start=1):
-            print(f"({i}) user: {p.prompt}")
-            output = PIPELINE.generate(p.prompt)
-            PIPELINE.json_file_loader(p.prompt, generated_str=output)
-            print()
+        if ARGS.engine == "legacy":
+            PIPELINE = LEGACY(
+                model=Small_LLM_Model(model_name=ARGS.model),
+                func_call=func_calling,
+                output_path=ARGS.output
+            )
+            for i, p in enumerate(prompts, start=1):
+                print(f"({i}) user: {p.prompt}")
+                output = PIPELINE.generate(p.prompt)
+                PIPELINE.json_file_loader(p.prompt, generated_str=output)
+                print()
+        else:
+
+            model = Small_LLM_Model(model_name=ARGS.model)
+            fsm = StateMachine(schemas=func_calling)
+
+            generator = Generator(
+                model=model,
+                fsm=fsm,
+                func_call=func_calling,
+            )
+            pipeline = GeneratorPipeline(
+                generator=generator,
+                output_path=ARGS.output,
+            )
+            pipeline.run(prompts=[p.prompt for p in prompts])
     except Exception as e:
-        print(e)
+        print(f"error: {e}")
     except KeyboardInterrupt:
         print("\n\033[32mKeybord Interrupt with success\033[0m")
         sys.exit(0)

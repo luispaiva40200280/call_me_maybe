@@ -10,6 +10,10 @@ install:
 run:
 	uv run python -m src --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
 
+debug:
+	uv run python -m src --engine generator
+
+
 clean:
 	@find . -type f -name "*.pyc" -delete
 	@find . -type f -name "*.pyo" -delete

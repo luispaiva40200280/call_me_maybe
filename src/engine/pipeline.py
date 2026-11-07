@@ -1,7 +1,4 @@
 # pipeline.py
-"""
-Future 
-"""
 from pydantic import BaseModel, ConfigDict
 from typing import Any
 from src.decoding import FunctionDef

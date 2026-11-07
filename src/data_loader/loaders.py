@@ -45,6 +45,10 @@ def load_vocab_lut(model: Small_LLM_Model) -> tuple[dict[int, str],
                                                     dict[str, int]]:
     """
     load the vocab dict from model in the (dict[str: token])
+    Args:
+        model (Small_llm_model):
+    Return:
+        lut (dict[int,str])
     """
     path = model.get_path_to_vocab_file()
     vocab: dict[str, int] = {}

@@ -34,5 +34,11 @@ def ArgsParser() -> argparse.Namespace:
         default="Qwen/Qwen3-0.6B",
         help="Name of the language model to use"
     )
+    parser.add_argument(
+       "--engine",
+       choices=("legacy", "generator"),
+       default="legacy",
+       help="Choose the legacy pipeline or the new generator-based pipeline",
+    )
     args = parser.parse_args()
     return args

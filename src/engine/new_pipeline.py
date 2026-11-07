@@ -11,8 +11,8 @@ from pathlib import Path
 
 class Pipeline(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
     generator: Generator
+
     output_path: str
 
     def model_post_init(self, __context: Any) -> None:
