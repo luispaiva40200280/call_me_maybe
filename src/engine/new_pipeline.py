@@ -31,7 +31,7 @@ class Pipeline(BaseModel):
         for prompt in prompts:
             try:
                 result = self.generator.generate(prompt)
-            except Exception:
+            except ValueError:
                 result = {"name": "", "parameters": {}}
             self._append_result(prompt, result)
 
@@ -42,10 +42,15 @@ class Pipeline(BaseModel):
         file_path = Path(self.output_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
+        try:
+            parsed_result = json.loads(result)
+        except json.JSONDecodeError:
+            parsed_result = {"name": "", "parameters": {}}
+
         entry = {
             "prompt": prompt,
-            "name": result.get("name", ""),
-            "parameters": result.get("parameters", {}),
+            "name": parsed_result.get("name", ""),
+            "parameters": parsed_result.get("parameters", {}),
         }
 
         data = []

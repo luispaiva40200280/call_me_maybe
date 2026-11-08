@@ -1,9 +1,11 @@
 from ..import ft_time
 from .import JSONState
-from ..decoding import FunctionDef
+from ..decoding import FunctionDef, ParameterSchema
 from .fsm import StateMachine
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any
+
+_EXIT_CHARS = (",", "}")
 
 
 class Generator(BaseModel):
@@ -13,21 +15,36 @@ class Generator(BaseModel):
     model: Any
     fsm: StateMachine
     func_call: list[FunctionDef]
-    max_tokens: int = 50  # max tokens for gen text
+    max_tokens: int = 15  # max tokens for gen text
     max_value_tokens: int = 24  # max tokens for gen numbers
     lut: dict[int, str] = Field(default_factory=dict)
     vocab_trie: Any = None
     max_tokens: int = 150
+    safe_chars: set[str] = Field(default_factory=set)
+    content_ids: list[int] = Field(default_factory=list)
+    quote_ids: list[int] = Field(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
         """
         """
         from ..data_loader.loaders import load_vocab_lut
         from ..decoding.constrained_decode import VocabularyTrie
-        # ola
+        import string
         self.lut, _ = load_vocab_lut(self.model)
         self.vocab_trie = VocabularyTrie()
         self.vocab_trie.build_from_lut(self.lut)
+
+        self.safe_chars = set(string.ascii_letters + string.digits
+                              + string.punctuation + " ")
+        self.safe_chars.discard('"')
+        self.safe_chars.discard("\\")
+        self.content_ids = self.vocab_trie.search_by_charset(self.safe_chars)
+
+        # Only permit a token whose text is exactly the closing quote.
+        self.quote_ids = [
+            token_id for token_id, text in self.lut.items()
+            if text == '"'
+        ]
 
     def _build_system_prompt(self, user: str) -> str:
         """
@@ -77,7 +94,7 @@ class Generator(BaseModel):
         tensor = self.model.encode(system)  # list all tokens in the prompt
         return tensor[0].tolist()
 
-    def _commit(self, tokens: list[int], text: str) -> None:
+    def _commit(self, tokens: list[int], text: str) -> str:
         """
         Applies a resolved piece of text: extends the running token list,
         advances the FSM, and hands the text back so the caller can append
@@ -126,13 +143,12 @@ class Generator(BaseModel):
         return int(allowed[np.argmax(logits[allowed])])
 
     def _genarate_compl_choice(self, tokens: list[int],
-                               allowed: list[str],
-                               max_steps: int = 50) -> tuple[str, int]:
+                               allowed: list[str]) -> tuple[str, int]:
         """Generate one complete choice, such as a function name."""
 
         accumulator = ""
         generated_text = ""
-        for steps in range(max_steps):
+        for steps in range(self.max_tokens):
             allowed_ids = self._allowed_token_ids(strings=allowed,
                                                   accumulator=accumulator)
             if not allowed_ids:
@@ -157,6 +173,110 @@ class Generator(BaseModel):
             f"Exceeded token limit while generating a choice in "
             f"{self.fsm.curr_state}"
         )
+
+    def _has_valid_decimal(self, accumulator: str) -> bool:
+        """
+        Checks if `accumulator` (the text generated so far for the current
+        number value) is a valid float type, i.e: 2.0 or 2.8
+        Args:
+            accumulator (str): numeric value to check if is a float
+        Returns:
+            bool :
+        """
+        dot_idx = accumulator.rfind(".")
+        if dot_idx == -1:
+            return False
+        return any(c.isdigit() for c in accumulator[dot_idx + 1:])
+
+    def _can_exit(self, text: str, param: ParameterSchema) -> bool:
+        """Whether the value generated so far is allowed to close."""
+        if not text:
+            return False
+        if param.type == "number":
+            return self._has_valid_decimal(text)
+        return True  # integer: any digit generated so far is enough
+
+    def _genarate_num_values(self, tokens: list[int],
+                             param: ParameterSchema) -> tuple[str, int]:
+        """Open-ended digit/'-'/'.' sampling for a number or integer value,
+        until an exit character (',' or '}') is both generated and legal.
+        Args:
+            tokens (list[int]): running token-id list; mutated in place as
+            each sampled token is appended.
+            param (ParameterSchema): the parameter currently being filled.
+        Returns:
+            (text, steps_used): text includes the resolved exit character.
+            and nbr of tokens used
+        Raises:
+            ValueError: if max_steps runs out before a valid value closes.
+        """
+        candidates = self.fsm.get_allowed_strings()
+        gen_value = ""
+        for steps in range(self.max_value_tokens):
+            allowed = candidates if self._can_exit(gen_value, param) else [
+                c for c in candidates if c.strip() not in _EXIT_CHARS
+            ]
+            allowed_ids = self._allowed_token_ids(strings=allowed,
+                                                  accumulator="")
+            if not allowed_ids:
+                raise ValueError(f"No token can continue {gen_value!r} "
+                                 f"in {self.fsm.curr_state}"
+                                 )
+            token_id = self._get_best_token(tokens=tokens,
+                                            allowed_ids=allowed_ids)
+            tokens.append(token_id)
+            token_str = self.lut.get(token_id)
+            if not token_str:
+                raise ValueError(f"Token ID {token_id} missing from LUT")
+            print(token_str, flush=True, end="")
+            gen_value += token_str
+
+            exit_char = next((c for c in _EXIT_CHARS if c in token_str), None)
+            if exit_char:
+                self.fsm.update_state(exit_char)
+                return gen_value, steps
+
+        raise ValueError(
+                    f"Exceeded token limit while generating numeric value"
+                    f"{self.fsm.curr_state}"
+                )
+
+    def _genarate_string_value(self, tokens: list[int]) -> tuple[str, int]:
+        """Genarating the string values for the arguments type string
+        Args:
+            tokens (list[int]):
+          Returns:
+            (text, steps_used): text includes the resolved exit character.
+                and nbr of tokens used
+        Raises:
+                ValueError: if max_steps runs out before a valid value closes.
+        """
+        generated = self._commit(tokens=tokens, text='"')
+        print(generated, flush=True, end="")
+
+        for step in range(self.max_tokens):
+            allowed_ids = list(self.content_ids)
+
+            allowed_ids.extend(self.quote_ids)
+            if not allowed_ids:
+                raise ValueError("No allowed tokens for string generation")
+
+            token_id = self._get_best_token(tokens, allowed_ids)
+            tokens.append(token_id)
+
+            token_text = self.lut.get(token_id)
+            if token_text is None:
+                raise ValueError(f"Token ID {token_id} missing from LUT")
+
+            print(token_text, flush=True, end="")
+            generated += token_text
+
+            if token_id in self.quote_ids:
+                # EXPECT_STRING_CONTENT -> EXPECT_PARAM_SEPARATOR_OR_CLOSE.
+                self.fsm.update_state('"')
+                return generated, step
+
+        raise ValueError("Exceeded token limit while generating a string")
 
     @ft_time
     def generate(self, prompt: str) -> str:
@@ -184,23 +304,33 @@ class Generator(BaseModel):
                     continue
                 # === 2 Func name genaration ===
                 if self.fsm.curr_state is JSONState.EXPECT_FUNCTION_NAME:
-                    remaining = self.max_tokens - sampled
-                    if remaining <= 0:
-                        raise ValueError(
-                            f"Exceeded max_tokens={self.max_tokens}"
-                        )
                     name_text, used_steps = self._genarate_compl_choice(
                         tokens=tokens,
-                        allowed=self.fsm.get_allowed_strings(),
-                        max_steps=remaining)
+                        allowed=self.fsm.get_allowed_strings()
+                    )
                     buffer += name_text
                     sampled += used_steps
                     continue
 
                 # === 3 Paramter Value Genaration ===
                 if self.fsm.curr_state is JSONState.EXPECT_PARAM_VALUE:
-                    
+                    param = self.fsm.curr_single_param
+                    if (param and param.type in ("number", "integer")):
+                        number_text, used_steps = self._genarate_num_values(
+                            tokens=tokens,
+                            param=param
+                        )
+                        buffer += number_text
+                        sampled += used_steps
+                        continue
 
+                    if param and param.type == "string":
+                        str_text, used_steps = self._genarate_string_value(
+                            tokens=tokens
+                        )
+                        buffer += str_text
+                        sampled += used_steps
+                        continue
 
             except Exception:
                 raise ValueError(f"Error on gen for {prompt}")

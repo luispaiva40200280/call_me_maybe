@@ -2,6 +2,10 @@ FUNCTIONS ?= ./data/input/functions_definition.json
 INPUT ?= ./data/input/function_calling_tests.json
 OUTPUT ?= ./data/output/function_calls.json
 
+func_moul ?= ../data/input/functions_definition.json
+imp_moul ?= ../data/input/function_calling_tests.json
+outp_moul ?= ../data/output/result.json
+
 all: install run
 
 install:
@@ -12,6 +16,9 @@ run:
 
 debug:
 	uv run python -m src --engine generator
+
+debug-moulinete:
+	uv run python -m src  --functions_definition $(func_moul) --input $(imp_moul) --output $(outp_moul) --engine generator
 
 
 clean:

@@ -270,7 +270,8 @@ class Pipeline(BaseModel):
             if steps > max_tokens:
                 raise ValueError(
                     f"Exceeded max_tokens={max_tokens} without completing "
-                    f"a valid function call (stuck in state {self.fsm.curr_state})"
+                    f"a valid function call (stuck in state \
+{self.fsm.curr_state})"
                 )
 
             allowed = self.fsm.get_allowed_strings()
@@ -303,8 +304,8 @@ class Pipeline(BaseModel):
                                          if missing_params
                                          else self.string_tokens_brace_first)
                     else:
-                        allowed_tokens = (self.string_tokens_comma 
-                                         if missing_params 
+                        allowed_tokens = (self.string_tokens_comma
+                                         if missing_params
                                          else self.string_tokens_brace)
 
                     if len(value_tokens) >= max_value_tokens:

@@ -175,6 +175,8 @@ class StateMachine(BaseModel):
         self.curr_state = JSONState.EXPECT_OPEN_BRACE
         self.prev_state = None
         self.curr_func_calling = None
+        self.curr_single_param = None
+        self.curr_params_schem = None
         self.generated_params.clear()
 
     @property
