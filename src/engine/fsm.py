@@ -18,6 +18,7 @@ class StateMachine(BaseModel):
     curr_func_calling: Optional[FunctionDef] = None
     curr_params_schem: Optional[dict[str, ParameterSchema]] = None
     curr_single_param: Optional[ParameterSchema] = None
+    curr_param_name: Optional[str] = None
     generated_params: set[str] = Field(default_factory=set)
 
     def _get_params_schema(self) -> dict[str, ParameterSchema] | None:
@@ -51,6 +52,7 @@ class StateMachine(BaseModel):
             raise ValueError(f"Invalid parameter {param_name}")
         self.curr_single_param = params[param_name]
         self.generated_params.add(param_name)
+        self.curr_param_name = param_name
         self._transition_to(JSONState.EXPECT_COLON)
 
     def _handle_func_name(self, text: str) -> None:

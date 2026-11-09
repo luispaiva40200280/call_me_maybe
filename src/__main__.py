@@ -62,10 +62,9 @@ def main() -> None:
     """
     from .data_loader import ArgsParser
     from llm_sdk import Small_LLM_Model
-    from src.engine.pipeline import Pipeline as LEGACY
     from src.engine.fsm import StateMachine
     from src.engine.genarator import Generator
-    from src.engine.new_pipeline import Pipeline as GeneratorPipeline
+    from src.engine.pipeline import Pipeline
 
     # loading all data necessary to use the pipeline
     try:
@@ -73,7 +72,7 @@ def main() -> None:
         prompts, func_calling = load_imports(ARGS=ARGS)
     except ValueError as err:
         for index, e in enumerate(err.errors(), start=1):
-            print(f"({index})\033[31m Error:\033[0m {e["msg"]}\n")
+            print(f"({index})\033[31m Error:\033[0m {e['msg']}\n")
         sys.exit(1)
     except (FileExistsError, FileNotFoundError) as e:
         print(f"\033[31m Error:\033[0m {e}")
@@ -84,32 +83,19 @@ def main() -> None:
 
     # loading the pipeline and using it
     try:
-        if ARGS.engine == "legacy":
-            PIPELINE = LEGACY(
-                model=Small_LLM_Model(model_name=ARGS.model),
-                func_call=func_calling,
-                output_path=ARGS.output
-            )
-            for i, p in enumerate(prompts, start=1):
-                print(f"({i}) user: {p.prompt}")
-                output = PIPELINE.generate(p.prompt)
-                PIPELINE.json_file_loader(p.prompt, generated_str=output)
-                print()
-        else:
+        model = Small_LLM_Model(model_name=ARGS.model)
+        fsm = StateMachine(schemas=func_calling)
 
-            model = Small_LLM_Model(model_name=ARGS.model)
-            fsm = StateMachine(schemas=func_calling)
-
-            generator = Generator(
-                model=model,
-                fsm=fsm,
-                func_call=func_calling,
-            )
-            pipeline = GeneratorPipeline(
-                generator=generator,
-                output_path=ARGS.output,
-            )
-            pipeline.run(prompts=[p.prompt for p in prompts])
+        generator = Generator(
+            model=model,
+            fsm=fsm,
+            func_call=func_calling,
+        )
+        pipeline = Pipeline(
+            generator=generator,
+            output_path=ARGS.output,
+        )
+        pipeline.run(prompts=[p.prompt for p in prompts])
     except Exception as e:
         print(f"error: {e}")
     except KeyboardInterrupt:

@@ -14,12 +14,8 @@ install:
 run:
 	uv run python -m src --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
 
-debug:
-	uv run python -m src --engine generator
-
 debug-moulinete:
-	uv run python -m src  --functions_definition $(func_moul) --input $(imp_moul) --output $(outp_moul) --engine generator
-
+	uv run python -m src  --functions_definition $(func_moul) --input $(imp_moul) --output $(outp_moul)
 
 clean:
 	@find . -type f -name "*.pyc" -delete
@@ -36,7 +32,7 @@ clean:
 
 lint:
 	flake8 src
-	mypy --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs srcmake
+	mypy --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs src
 
 .PHONY = install run clean debug lint
 

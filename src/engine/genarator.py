@@ -3,9 +3,18 @@ from .import JSONState
 from ..decoding import FunctionDef, ParameterSchema
 from .fsm import StateMachine
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any
+from typing import Any, Optional
 
 _EXIT_CHARS = (",", "}")
+_REGEX_SIGNAL_CHARS = set("[](){}|+*?^$\\")
+"""_PATTERN_GUIDANCE = (
+    "Guidance: when a value is a pattern meant to match text in general "
+    "(e.g. a regular expression), write a general rule rather than one "
+    "shaped around the specific example in the request -- for instance, "
+    "use \\d+ to match any run of digits, not a pattern tied to where "
+    "a particular number happens to sit in this one request."
+)
+"""
 
 
 class Generator(BaseModel):
@@ -15,11 +24,11 @@ class Generator(BaseModel):
     model: Any
     fsm: StateMachine
     func_call: list[FunctionDef]
-    max_tokens: int = 15  # max tokens for gen text
+    max_tokens: int = 50  # max tokens for gen text
     max_value_tokens: int = 24  # max tokens for gen numbers
     lut: dict[int, str] = Field(default_factory=dict)
     vocab_trie: Any = None
-    max_tokens: int = 150
+
     safe_chars: set[str] = Field(default_factory=set)
     content_ids: list[int] = Field(default_factory=list)
     quote_ids: list[int] = Field(default_factory=list)
@@ -130,15 +139,18 @@ class Generator(BaseModel):
         return self.vocab_trie.search_allowed_tokens(remainders)
 
     def _get_best_token(self, tokens: list[int],
-                        allowed_ids: list[int]) -> int:
+                        allowed_ids: list[int],
+                        boost: Optional[dict[int, float]] = None) -> int:
         """
         Finds the allowed token with the highest logit score.
         """
         import numpy as np
-        logits = np.asarray(
-            self.model.get_logits_from_input_ids(tokens),
-            dtype=np.float32,
-        )
+        logits = np.asarray(self.model.get_logits_from_input_ids(tokens),
+                            dtype=np.float32)
+        if boost:
+            for tid, factor in boost.items():
+                logits[tid] = (logits[tid] * factor if logits[tid] > 0
+                               else logits[tid] / factor)
         allowed = np.asarray(allowed_ids, dtype=np.int64)
         return int(allowed[np.argmax(logits[allowed])])
 
@@ -261,7 +273,14 @@ class Generator(BaseModel):
             if not allowed_ids:
                 raise ValueError("No allowed tokens for string generation")
 
-            token_id = self._get_best_token(tokens, allowed_ids)
+            boost = None
+            if self.fsm.curr_param_name == "regex":
+                if (self._looks_like_regex(generated)
+                        and self._is_valid_regex(generated)):
+                    boost = {tid: 4.5 for tid in self.quote_ids}
+
+            token_id = self._get_best_token(tokens, allowed_ids,
+                                            boost=boost)
             tokens.append(token_id)
 
             token_text = self.lut.get(token_id)
@@ -276,7 +295,26 @@ class Generator(BaseModel):
                 self.fsm.update_state('"')
                 return generated, step
 
-        raise ValueError("Exceeded token limit while generating a string")
+        self.fsm.update_state('"')
+        return generated, step
+
+    def _is_valid_regex(self, content: str) -> bool:
+        """
+        """
+        import re
+        try:
+            re.compile(content)
+            return True
+        except re.error:
+            return False
+
+    def _looks_like_regex(self, gen: str) -> bool:
+        """Whether `content` contains actual regex syntax, as opposed to
+        just being an ordinary string that happens to also compile (nearly
+        any plain text does). Gates the boost below so it never engages on
+        an unrelated string value like a plain sentence.
+        """
+        return any(c in _REGEX_SIGNAL_CHARS for c in gen)
 
     @ft_time
     def generate(self, prompt: str) -> str:
