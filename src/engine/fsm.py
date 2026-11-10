@@ -129,7 +129,8 @@ class StateMachine(BaseModel):
 
         if next_state is None:
             raise ValueError(
-                f"No transition for {text!r} in {self.curr_state.name}"
+                f"No transition for {text!r} in "
+                f"{self.prev_state.name} - {self.curr_state.name}"
             )
 
         self._transition_to(next_state)
@@ -152,7 +153,7 @@ class StateMachine(BaseModel):
         return list(dict.fromkeys(
             variant
             for text in choices
-            for variant in (text, f" {text}")
+            for variant in (text, f"{text}")
         ))
 
     def get_deterministic_string(self) -> Optional[str]:

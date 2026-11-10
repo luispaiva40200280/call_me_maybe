@@ -8,14 +8,6 @@ from typing import Any, Optional
 
 _EXIT_CHARS = (",", "}")
 _REGEX_SIGNAL_CHARS = set("[](){}|+*?^$\\")
-"""_PATTERN_GUIDANCE = (
-    "Guidance: when a value is a pattern meant to match text in general "
-    "(e.g. a regular expression), write a general rule rather than one "
-    "shaped around the specific example in the request -- for instance, "
-    "use \\d+ to match any run of digits, not a pattern tied to where "
-    "a particular number happens to sit in this one request."
-)
-"""
 
 
 class Generator(BaseModel):
@@ -127,6 +119,7 @@ class Generator(BaseModel):
         """
         tokens.extend(self.model.encode(text)[0].tolist())
         self.fsm.update_state(gen_str=text)
+        print(text, flush=True, end="")
         return text
 
     def _allowed_token_ids(self, strings: list[str],
@@ -264,40 +257,46 @@ class Generator(BaseModel):
         Raises:
                 ValueError: if max_steps runs out before a valid value closes.
         """
+        # Commit the opening quote to the token stream and FSM
         generated = self._commit(tokens=tokens, text='"')
-        print(generated, flush=True, end="")
+
+        # Permit any valid token ID from the lookup table for maximum
+        # character support
+        allowed_ids = list(self.lut.keys())
+        escape_active = False
         for step in range(self.max_tokens):
-            allowed_ids = list(self.content_ids)
-
-            allowed_ids.extend(self.quote_ids)
-            if not allowed_ids:
-                raise ValueError("No allowed tokens for string generation")
-
-            boost = None
-            if self.fsm.curr_param_name == "regex":
-                if (self._looks_like_regex(generated)
-                        and self._is_valid_regex(generated)):
-                    boost = {tid: 4.5 for tid in self.quote_ids}
-
             token_id = self._get_best_token(tokens=tokens,
-                                            allowed_ids=allowed_ids,
-                                            boost=boost)
+                                            allowed_ids=allowed_ids)
             tokens.append(token_id)
 
             token_text = self.lut.get(token_id)
             if token_text is None:
                 raise ValueError(f"Token ID {token_id} missing from LUT")
 
-            print(token_text, flush=True, end="")
-            generated += token_text
+            for idx, char in enumerate(token_text):
+                if escape_active:
+                    escape_active = False
+                elif char == "\\":
+                    escape_active = True
+                elif char == '"':
+                    accepted = token_text[:idx + 1]
 
-            if token_id in self.quote_ids:
-                # EXPECT_STRING_CONTENT -> EXPECT_PARAM_SEPARATOR_OR_CLOSE.
-                self.fsm.update_state('"')
-                return generated, step
+                    # If this token also contains text after the quote, replace
+                    # its token ID with tokens for only the accepted prefix.
+                    if idx + 1 < len(token_text):
+                        tokens.pop()
+                        tokens.extend(self.model.encode(accepted)[0].tolist())
+
+                    generated += accepted
+                    print(accepted, flush=True, end="")
+                    self.fsm.update_state('"')
+                    return generated, step + 1
+
+            generated += token_text
+            print(token_text, flush=True, end="")
 
         self.fsm.update_state('"')
-        return generated, step
+        return generated, self.max_tokens
 
     def _is_valid_regex(self, content: str) -> bool:
         """
@@ -334,44 +333,40 @@ class Generator(BaseModel):
         sampled: int = 0
 
         while self.fsm.curr_state is not JSONState.DONE:
-            try:
-                # === 1. DETERMINISTIC BYPASS ===
-                det_text = self.fsm.get_deterministic_string()
-                if det_text:
-                    buffer += self._commit(tokens=tokens, text=det_text)
-                    print(det_text, end="", flush=True)
-                    continue
-                # === 2 Func name genaration ===
-                if self.fsm.curr_state is JSONState.EXPECT_FUNCTION_NAME:
-                    name_text, used_steps = self._genarate_compl_choice(
+            # === 1. DETERMINISTIC BYPASS ===
+            det_text = self.fsm.get_deterministic_string()
+            if det_text:
+                buffer += self._commit(tokens=tokens, text=det_text)
+                continue
+            # === 2 Func name genaration ===
+            if self.fsm.curr_state is JSONState.EXPECT_FUNCTION_NAME:
+                name_text, used_steps = self._genarate_compl_choice(
+                    tokens=tokens,
+                    allowed=self.fsm.get_allowed_strings()
+                )
+                buffer += name_text
+                sampled += used_steps
+                continue
+
+            # === 3 Paramter Value Genaration ===
+            if self.fsm.curr_state is JSONState.EXPECT_PARAM_VALUE:
+                param = self.fsm.curr_single_param
+                if (param and param.type in ("number", "integer")):
+                    number_text, used_steps = self._genarate_num_values(
                         tokens=tokens,
-                        allowed=self.fsm.get_allowed_strings()
+                        param=param
                     )
-                    buffer += name_text
+                    buffer += number_text
                     sampled += used_steps
                     continue
 
-                # === 3 Paramter Value Genaration ===
-                if self.fsm.curr_state is JSONState.EXPECT_PARAM_VALUE:
-                    param = self.fsm.curr_single_param
-                    if (param and param.type in ("number", "integer")):
-                        number_text, used_steps = self._genarate_num_values(
-                            tokens=tokens,
-                            param=param
-                        )
-                        buffer += number_text
-                        sampled += used_steps
-                        continue
+                if param and param.type == "string":
+                    str_text, used_steps = self._genarate_string_value(
+                        tokens=tokens,
+                        user=prompt
+                    )
+                    buffer += str_text
+                    sampled += used_steps
+                    continue
 
-                    if param and param.type == "string":
-                        str_text, used_steps = self._genarate_string_value(
-                            tokens=tokens,
-                            user=prompt
-                        )
-                        buffer += str_text
-                        sampled += used_steps
-                        continue
-
-            except Exception:
-                raise ValueError(f"Error on gen for {prompt}")
         return buffer
