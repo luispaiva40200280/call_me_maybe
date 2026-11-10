@@ -28,7 +28,8 @@ class Pipeline(BaseModel):
         logged and skipped rather than aborting the whole batch -- this
         is the gap that let one bad prompt crash an entire run before.
         """
-        for prompt in prompts:
+        for nbr, prompt in enumerate(prompts[8:], start=1):
+            print(f"({nbr}): {prompt}")
             try:
                 result = self.generator.generate(prompt)
             except ValueError:

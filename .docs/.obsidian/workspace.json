@@ -200,12 +200,16 @@
       "bases:Create new base": false
     }
   },
-  "active": "1c1ef40434490243",
+  "active": "0c46700992b76658",
   "lastOpenFiles": [
+    "decoding",
+    "loaders",
+    "Changes to optimize the project.md",
+    "Untitled.md",
+    "Code_Explanation",
     "call_me_maybe.pdf",
     "UV PACKAGE MANAGER.md",
     "BPE - BYTE PAIR ENCODING.md",
-    "Changes to optimize the project.md",
     "Dot Product.md",
     "LOGITS AND TOKEN SELECTION.md",
     "CALL ME MAYBE.md",

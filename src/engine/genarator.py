@@ -1,5 +1,6 @@
 from ..import ft_time
 from .import JSONState
+from ..decoding.constrained_decode import VocabularyTrie
 from ..decoding import FunctionDef, ParameterSchema
 from .fsm import StateMachine
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,7 +38,6 @@ class Generator(BaseModel):
         """
         """
         from ..data_loader.loaders import load_vocab_lut
-        from ..decoding.constrained_decode import VocabularyTrie
         import string
         self.lut, _ = load_vocab_lut(self.model)
         self.vocab_trie = VocabularyTrie()
@@ -81,11 +81,15 @@ class Generator(BaseModel):
         fn_defs_block = "\n".join(fn_defs_lines)
         # Truncated the hardcoded JSON so the FSM can generate the root brace
         return (
-            "You are a function calling assistant.\n\n"
+            "<|im_start|>system\n"
+            "You are a strict function calling assistant.\n"
             "Available functions:\n"
-            f"{fn_defs_block}\n\n"
-            f"User request: {user}\n\n"
-            "Output the correct function call as JSON:\n"
+            f"{fn_defs_block}\n"
+            "Output the correct function call as JSON.<|im_end|>\n"
+            "<|im_start|>user\n"
+            f"{user}\n\n"
+            "<|im_end|>\n"
+            "<|im_start|>assistant\n"
         )
 
     def _encode_prompt(self, prompt: str) -> list[int]:
@@ -181,10 +185,8 @@ class Generator(BaseModel):
                 self.fsm.update_state(accumulator)
                 return generated_text, steps
 
-        raise ValueError(
-            f"Exceeded token limit while generating a choice in "
-            f"{self.fsm.curr_state}"
-        )
+        self.fsm.update_state(accumulator)
+        return generated_text, steps
 
     def _has_valid_decimal(self, accumulator: str) -> bool:
         """
@@ -248,12 +250,11 @@ class Generator(BaseModel):
                 self.fsm.update_state(exit_char)
                 return gen_value, steps
 
-        raise ValueError(
-                    f"Exceeded token limit while generating numeric value"
-                    f"{self.fsm.curr_state}"
-                )
+        self.fsm.update_state('"')
+        return gen_value, steps
 
-    def _genarate_string_value(self, tokens: list[int]) -> tuple[str, int]:
+    def _genarate_string_value(self, tokens: list[int],
+                               user: str) -> tuple[str, int]:
         """Genarating the string values for the arguments type string
         Args:
             tokens (list[int]):
@@ -265,7 +266,6 @@ class Generator(BaseModel):
         """
         generated = self._commit(tokens=tokens, text='"')
         print(generated, flush=True, end="")
-
         for step in range(self.max_tokens):
             allowed_ids = list(self.content_ids)
 
@@ -279,7 +279,8 @@ class Generator(BaseModel):
                         and self._is_valid_regex(generated)):
                     boost = {tid: 4.5 for tid in self.quote_ids}
 
-            token_id = self._get_best_token(tokens, allowed_ids,
+            token_id = self._get_best_token(tokens=tokens,
+                                            allowed_ids=allowed_ids,
                                             boost=boost)
             tokens.append(token_id)
 
@@ -364,7 +365,8 @@ class Generator(BaseModel):
 
                     if param and param.type == "string":
                         str_text, used_steps = self._genarate_string_value(
-                            tokens=tokens
+                            tokens=tokens,
+                            user=prompt
                         )
                         buffer += str_text
                         sampled += used_steps

@@ -99,11 +99,10 @@ class StateMachine(BaseModel):
         elif (self.curr_single_param and
                 self.curr_single_param.type in ("number", "integer")):
             allowed = list(string.digits)
-            allowed.extend([f" {d}" for d in string.digits])
-            allowed.extend(["-", " -"])
+            allowed.extend("-")
             if self.curr_single_param.type == "number":
-                allowed.extend([".", " ."])
-            allowed.extend([",", " ,", "}", " }"])
+                allowed.extend(".")
+            allowed.extend([",", "}"])
             return allowed
         elif (self.curr_single_param is not None
                 and self.curr_single_param.type == "string"):

@@ -14,7 +14,7 @@ install:
 run:
 	uv run python -m src --functions_definition $(FUNCTIONS) --input $(INPUT) --output $(OUTPUT)
 
-debug-moulinete:
+run-moulinete:
 	uv run python -m src  --functions_definition $(func_moul) --input $(imp_moul) --output $(outp_moul)
 
 clean:
@@ -30,13 +30,11 @@ clean:
 	@find . -type d -name ".mypy_cache" -exec rm -rf {} +
 	@find . -type d -name ".pytest_cache" -exec rm -rf {} +
 
+debug:
+	uv run python pbg -m src 
+
 lint:
 	flake8 src
 	mypy --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs src
 
 .PHONY = install run clean debug lint
-
-
-#uv venv
-#uv pip install  pydantic numpy flake8 
-#uv pip install -e llm_sdk
